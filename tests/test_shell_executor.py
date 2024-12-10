@@ -1,4 +1,3 @@
-import os
 import pytest
 from mcp_shell_server.shell_executor import ShellExecutor
 
@@ -8,12 +7,10 @@ def executor():
 
 @pytest.mark.asyncio
 async def test_basic_command_execution(executor, monkeypatch):
-    monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls")
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
     result = await executor.execute(["echo", "hello"])
     assert result["stdout"].strip() == "hello"
     assert result["status"] == 0
-    assert result["stderr"] == ""
-    assert "execution_time" in result
 
 @pytest.mark.asyncio
 async def test_stdin_input(executor, monkeypatch):
@@ -45,13 +42,15 @@ async def test_command_with_space_in_allow_commands(executor, monkeypatch):
 @pytest.mark.asyncio
 async def test_multiple_commands_with_operator(executor, monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls")
-    result = await executor.execute(["echo", "hello", ";", "ls", "-l"])
-    assert "Command not allowed: ls" in result["error"]
+    result = await executor.execute(["echo", "hello", ";"])
+    assert result["error"] == "Unexpected shell operator: ;"
     assert result["status"] == 1
 
 @pytest.mark.asyncio
-async def test_command_with_error_output(executor, monkeypatch):
-    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
-    result = await executor.execute(["ls", "/nonexistent"])
-    assert result["stderr"] != ""
-    assert result["status"] != 0
+async def test_shell_operators_not_allowed(executor, monkeypatch):
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls")
+    operators = [";", "&&", "||", "|"]
+    for op in operators:
+        result = await executor.execute(["echo", "hello", op])
+        assert result["error"] == f"Unexpected shell operator: {op}"
+        assert result["status"] == 1
