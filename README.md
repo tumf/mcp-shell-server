@@ -4,23 +4,15 @@ A secure shell command execution server implementing the Model Context Protocol 
 
 ## Features
 
-* **Secure Command Execution**: Only whitelisted commands can be executed
-* **Stdin Support**: Pass input to commands via stdin
-* **Comprehensive Output**: Returns stdout, stderr, exit status, and execution time
-* **Shell Operator Safety**: Validates commands after shell operators (; , &&, ||, |)
+- **Secure Command Execution**: Only whitelisted commands can be executed
+- **Standard Input Support**: Pass input to commands via stdin
+- **Comprehensive Output**: Returns stdout, stderr, exit status, and execution time
+- **Shell Operator Safety**: Validates commands after shell operators (;, &&, ||, |)
 
 ## Installation
 
 ```bash
 pip install mcp-shell-server
-```
-
-Or install from source:
-
-```bash
-git clone https://github.com/yourusername/mcp-shell-server.git
-cd mcp-shell-server
-pip install -e .
 ```
 
 ## Usage
@@ -31,11 +23,16 @@ pip install -e .
 ALLOW_COMMANDS="ls,cat,echo" uvx mcp-shell-server
 ```
 
-The `ALLOW_COMMANDS` environment variable specifies which commands are allowed to be executed.
+The `ALLOW_COMMANDS` environment variable specifies which commands are allowed to be executed. Commands can be separated by commas with optional spaces around them.
 
-### Making Requests
+Valid formats for ALLOW_COMMANDS:
+```bash
+ALLOW_COMMANDS="ls,cat,echo"          # Basic format
+ALLOW_COMMANDS="ls ,echo, cat"        # With spaces
+ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
+```
 
-Example requests to the server:
+### Request Format
 
 ```python
 # Basic command execution
@@ -53,7 +50,6 @@ Example requests to the server:
 ### Response Format
 
 Successful response:
-
 ```json
 {
     "stdout": "command output",
@@ -64,7 +60,6 @@ Successful response:
 ```
 
 Error response:
-
 ```json
 {
     "error": "Command not allowed: rm",
@@ -80,23 +75,40 @@ Error response:
 The server implements several security measures:
 
 1. **Command Whitelisting**: Only explicitly allowed commands can be executed
-2. **Shell Operator Validation**: Commands after shell operators are also validated against the whitelist
+2. **Shell Operator Validation**: Commands after shell operators (;, &&, ||, |) are also validated against the whitelist
 3. **No Shell Injection**: Commands are executed directly without shell interpretation
 
-## Environment Variables
+## Development
 
-* `ALLOW_COMMANDS`: Comma-separated list of allowed commands (e.g., "ls, cat, echo")
+### Setting up Development Environment
+
+1. Clone the repository
+```bash
+git clone https://github.com/yourusername/mcp-shell-server.git
+cd mcp-shell-server
+```
+
+2. Install dependencies including test requirements
+```bash
+pip install -e ".[test]"
+```
+
+### Running Tests
+
+```bash
+pytest
+```
 
 ## API Reference
 
-### Request Format
+### Request Arguments
 
-| Field    | Type       | Description                                   |
-|----------|------------|-----------------------------------------------|
-| command  | string[]   | Command and its arguments as array elements   |
-| stdin    | string     | (Optional) Input to be passed to the command |
+| Field    | Type       | Required | Description                                   |
+|----------|------------|----------|-----------------------------------------------|
+| command  | string[]   | Yes      | Command and its arguments as array elements   |
+| stdin    | string     | No       | Input to be passed to the command            |
 
-### Response Format
+### Response Fields
 
 | Field           | Type    | Description                                |
 |----------------|---------|---------------------------------------------|
@@ -104,11 +116,13 @@ The server implements several security measures:
 | stderr         | string  | Standard error output from the command     |
 | status         | integer | Exit status code                           |
 | execution_time | float   | Time taken to execute (in seconds)         |
-| error          | string  | (Optional) Error message if failed         |
+| error          | string  | Error message (only present if failed)     |
 
 ## Requirements
 
-* Python 3.11 or higher
-* uvicorn
-* fastapi
-* mcp-core
+- Python 3.11 or higher
+- mcp>=1.1.0
+
+## License
+
+MIT License - See LICENSE file for details
