@@ -26,6 +26,18 @@ class ShellExecutor:
         allow_commands = os.environ.get("ALLOW_COMMANDS", "")
         return {cmd.strip() for cmd in allow_commands.split(",") if cmd.strip()}
 
+    def _clean_command(self, command: List[str]) -> List[str]:
+        """
+        Clean command by trimming whitespace from each part.
+        
+        Args:
+            command (List[str]): Original command and its arguments
+            
+        Returns:
+            List[str]: Cleaned command with trimmed whitespace
+        """
+        return [arg.strip() for arg in command if arg.strip()]
+
     def _validate_command(self, command: List[str]) -> None:
         """
         Validate if the command is allowed to be executed.
@@ -43,17 +55,20 @@ class ShellExecutor:
         if not allowed_commands:
             raise ValueError("No commands are allowed. Please set ALLOW_COMMANDS environment variable.")
 
-        if command[0] not in allowed_commands:
-            raise ValueError(f"Command not allowed: {command[0]}")
+        # Clean and check the first command
+        cleaned_cmd = command[0].strip()
+        if cleaned_cmd not in allowed_commands:
+            raise ValueError(f"Command not allowed: {cleaned_cmd}")
 
         # Check for shell operators and validate subsequent commands
         for i, arg in enumerate(command[1:], start=1):
-            if arg in [";", "&&", "||", "|"]:
+            cleaned_arg = arg.strip()
+            if cleaned_arg in [";", "&&", "||", "|"]:
                 if i + 1 >= len(command):
-                    raise ValueError(f"Unexpected shell operator: {arg}")
-                next_cmd = command[i + 1]
+                    raise ValueError(f"Unexpected shell operator: {cleaned_arg}")
+                next_cmd = command[i + 1].strip()
                 if next_cmd not in allowed_commands:
-                    raise ValueError(f"Command not allowed after {arg}: {next_cmd}")
+                    raise ValueError(f"Command not allowed after {cleaned_arg}: {next_cmd}")
 
     async def execute(self, command: List[str], stdin: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -70,7 +85,12 @@ class ShellExecutor:
         start_time = time.time()
 
         try:
-            self._validate_command(command)
+            # Clean command before validation and execution
+            cleaned_command = self._clean_command(command)
+            if not cleaned_command:
+                raise ValueError("Empty command")
+                
+            self._validate_command(cleaned_command)
         except ValueError as e:
             return {
                 "error": str(e),
@@ -82,8 +102,8 @@ class ShellExecutor:
 
         try:
             process = await asyncio.create_subprocess_exec(
-                command[0],
-                *command[1:],
+                cleaned_command[0],
+                *cleaned_command[1:],
                 stdin=asyncio.subprocess.PIPE if stdin else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -94,6 +114,7 @@ class ShellExecutor:
             stdout, stderr = await process.communicate(input=stdin_bytes)
 
             return {
+                "error": None,  # Set error field to None for success case
                 "stdout": stdout.decode() if stdout else "",
                 "stderr": stderr.decode() if stderr else "",
                 "status": process.returncode,
@@ -101,10 +122,10 @@ class ShellExecutor:
             }
         except FileNotFoundError:
             return {
-                "error": f"Command not found: {command[0]}",
+                "error": f"Command not found: {cleaned_command[0]}",
                 "status": 1,
                 "stdout": "",
-                "stderr": f"Command not found: {command[0]}",
+                "stderr": f"Command not found: {cleaned_command[0]}",
                 "execution_time": time.time() - start_time
             }
         except Exception as e:
