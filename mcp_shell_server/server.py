@@ -12,8 +12,10 @@ logger = logging.getLogger("mcp-shell-server")
 
 app = Server("mcp-shell-server")
 
+
 class ExecuteToolHandler:
     """Handler for shell command execution"""
+
     name = "execute"
     description = "Execute a shell command"
 
@@ -31,50 +33,45 @@ class ExecuteToolHandler:
                     "command": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Command and its arguments as array"
+                        "description": "Command and its arguments as array",
                     },
                     "stdin": {
                         "type": "string",
-                        "description": "Input to be passed to the command via stdin"
-                    }
+                        "description": "Input to be passed to the command via stdin",
+                    },
                 },
-                "required": ["command"]
-            }
+                "required": ["command"],
+            },
         )
 
     async def run_tool(self, arguments: dict) -> Sequence[TextContent]:
         """Execute the shell command with the given arguments"""
         command = arguments.get("command", [])
         stdin = arguments.get("stdin")
-        
+
         if not command:
             raise ValueError("No command provided")
-        
+
         result = await self.executor.execute(command, stdin)
-        
+
         # Raise error if command execution failed
         if result.get("error"):
             raise RuntimeError(result["error"])
 
         # Convert executor result to TextContent sequence
         content: list[TextContent] = []
-        
+
         if result.get("stdout"):
-            content.append(TextContent(
-                type="text",
-                text=result["stdout"]
-            ))
+            content.append(TextContent(type="text", text=result["stdout"]))
         if result.get("stderr"):
-            content.append(TextContent(
-                type="text",
-                text=result["stderr"]
-            ))
-            
+            content.append(TextContent(type="text", text=result["stderr"]))
+
         return content
 
 
 # Initialize tool handlers
 tool_handler = ExecuteToolHandler()
+
 
 @app.list_tools()
 async def list_tools() -> list[Tool]:
@@ -107,9 +104,7 @@ async def main() -> None:
 
         async with stdio_server() as (read_stream, write_stream):
             await app.run(
-                read_stream,
-                write_stream,
-                app.create_initialization_options()
+                read_stream, write_stream, app.create_initialization_options()
             )
     except Exception as e:
         logger.error(f"Server error: {str(e)}")

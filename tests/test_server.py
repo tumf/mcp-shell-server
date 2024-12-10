@@ -1,6 +1,6 @@
 import pytest
 from mcp.types import TextContent, Tool
-from mcp_shell_server.server import call_tool, list_tools, tool_handler
+from mcp_shell_server.server import call_tool, list_tools
 
 
 @pytest.mark.asyncio
@@ -22,9 +22,7 @@ async def test_list_tools():
 async def test_call_tool_valid_command(monkeypatch):
     """Test execution of a valid command"""
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
-    result = await call_tool("execute", {
-        "command": ["echo", "hello world"]
-    })
+    result = await call_tool("execute", {"command": ["echo", "hello world"]})
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
     assert result[0].type == "text"
@@ -35,10 +33,7 @@ async def test_call_tool_valid_command(monkeypatch):
 async def test_call_tool_with_stdin(monkeypatch):
     """Test command execution with stdin"""
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
-    result = await call_tool("execute", {
-        "command": ["cat"],
-        "stdin": "test input"
-    })
+    result = await call_tool("execute", {"command": ["cat"], "stdin": "test input"})
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
     assert result[0].type == "text"
@@ -50,9 +45,7 @@ async def test_call_tool_invalid_command(monkeypatch):
     """Test execution of an invalid command"""
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
     with pytest.raises(RuntimeError) as excinfo:
-        await call_tool("execute", {
-            "command": ["invalid_command"]
-        })
+        await call_tool("execute", {"command": ["invalid_command"]})
     assert "Command not allowed: invalid_command" in str(excinfo.value)
 
 
@@ -76,7 +69,5 @@ async def test_call_tool_invalid_arguments():
 async def test_call_tool_empty_command():
     """Test execution with empty command"""
     with pytest.raises(RuntimeError) as excinfo:
-        await call_tool("execute", {
-            "command": []
-        })
+        await call_tool("execute", {"command": []})
     assert "No command provided" in str(excinfo.value)

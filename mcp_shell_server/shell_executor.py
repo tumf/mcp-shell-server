@@ -1,14 +1,14 @@
 import os
 import time
 import asyncio
-import shlex
 from typing import Dict, List, Optional, Any
+
 
 class ShellExecutor:
     """
     Executes shell commands in a secure manner by validating against a whitelist.
     """
-    
+
     def __init__(self):
         """
         Initialize the executor. The allowed commands are read from ALLOW_COMMANDS
@@ -19,7 +19,7 @@ class ShellExecutor:
     def _get_allowed_commands(self) -> set:
         """
         Get the set of allowed commands from environment variable.
-        
+
         Returns:
             set: Set of allowed command names
         """
@@ -29,10 +29,10 @@ class ShellExecutor:
     def _clean_command(self, command: List[str]) -> List[str]:
         """
         Clean command by trimming whitespace from each part.
-        
+
         Args:
             command (List[str]): Original command and its arguments
-            
+
         Returns:
             List[str]: Cleaned command with trimmed whitespace
         """
@@ -41,10 +41,10 @@ class ShellExecutor:
     def _validate_command(self, command: List[str]) -> None:
         """
         Validate if the command is allowed to be executed.
-        
+
         Args:
             command (List[str]): Command and its arguments
-            
+
         Raises:
             ValueError: If the command is empty, not allowed, or contains invalid shell operators
         """
@@ -53,7 +53,9 @@ class ShellExecutor:
 
         allowed_commands = self._get_allowed_commands()
         if not allowed_commands:
-            raise ValueError("No commands are allowed. Please set ALLOW_COMMANDS environment variable.")
+            raise ValueError(
+                "No commands are allowed. Please set ALLOW_COMMANDS environment variable."
+            )
 
         # Clean and check the first command
         cleaned_cmd = command[0].strip()
@@ -68,16 +70,20 @@ class ShellExecutor:
                     raise ValueError(f"Unexpected shell operator: {cleaned_arg}")
                 next_cmd = command[i + 1].strip()
                 if next_cmd not in allowed_commands:
-                    raise ValueError(f"Command not allowed after {cleaned_arg}: {next_cmd}")
+                    raise ValueError(
+                        f"Command not allowed after {cleaned_arg}: {next_cmd}"
+                    )
 
-    async def execute(self, command: List[str], stdin: Optional[str] = None) -> Dict[str, Any]:
+    async def execute(
+        self, command: List[str], stdin: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Execute a shell command with optional stdin input.
-        
+
         Args:
             command (List[str]): Command and its arguments
             stdin (Optional[str]): Input to be passed to the command via stdin
-            
+
         Returns:
             Dict[str, Any]: Execution result containing stdout, stderr, status code, and execution time.
                            If error occurs, result contains additional 'error' field.
@@ -89,7 +95,7 @@ class ShellExecutor:
             cleaned_command = self._clean_command(command)
             if not cleaned_command:
                 raise ValueError("Empty command")
-                
+
             self._validate_command(cleaned_command)
         except ValueError as e:
             return {
@@ -97,7 +103,7 @@ class ShellExecutor:
                 "status": 1,
                 "stdout": "",
                 "stderr": str(e),
-                "execution_time": time.time() - start_time
+                "execution_time": time.time() - start_time,
             }
 
         try:
@@ -107,7 +113,7 @@ class ShellExecutor:
                 stdin=asyncio.subprocess.PIPE if stdin else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env={"PATH": os.environ.get("PATH", "")}
+                env={"PATH": os.environ.get("PATH", "")},
             )
 
             stdin_bytes = stdin.encode() if stdin else None
@@ -118,7 +124,7 @@ class ShellExecutor:
                 "stdout": stdout.decode() if stdout else "",
                 "stderr": stderr.decode() if stderr else "",
                 "status": process.returncode,
-                "execution_time": time.time() - start_time
+                "execution_time": time.time() - start_time,
             }
         except FileNotFoundError:
             return {
@@ -126,7 +132,7 @@ class ShellExecutor:
                 "status": 1,
                 "stdout": "",
                 "stderr": f"Command not found: {cleaned_command[0]}",
-                "execution_time": time.time() - start_time
+                "execution_time": time.time() - start_time,
             }
         except Exception as e:
             return {
@@ -134,5 +140,5 @@ class ShellExecutor:
                 "status": 1,
                 "stdout": "",
                 "stderr": str(e),
-                "execution_time": time.time() - start_time
+                "execution_time": time.time() - start_time,
             }

@@ -27,7 +27,7 @@ async def test_stdin_input(executor, monkeypatch):
 async def test_command_with_space_allowed(executor, monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
     result = await executor.execute(["cat "], stdin="hello world")
-    assert result["error"] == None
+    assert result["error"] is None
     assert result["stdout"].strip() == "hello world"
     assert result["status"] == 0
 
