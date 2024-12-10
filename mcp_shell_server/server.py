@@ -1,11 +1,9 @@
-import asyncio
-from mcp import Server
+from mcp.server.stdio import stdio_server
 from .shell_executor import ShellExecutor
 
 
-class ShellServer(Server):
+class ShellServer:
     def __init__(self):
-        super().__init__()
         self.executor = ShellExecutor()
 
     async def handle(self, args: dict) -> dict:
@@ -20,4 +18,4 @@ class ShellServer(Server):
 
 def main():
     server = ShellServer()
-    server.run()
+    stdio_server(server.handle)
