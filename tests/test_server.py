@@ -1,5 +1,6 @@
 import pytest
 from mcp.types import TextContent, Tool
+
 from mcp_shell_server.server import call_tool, list_tools
 
 

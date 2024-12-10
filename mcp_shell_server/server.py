@@ -1,9 +1,11 @@
 import logging
+import traceback
 from collections.abc import Sequence
 from typing import Any
-import traceback
+
 from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
+
 from .shell_executor import ShellExecutor
 
 # Configure logging

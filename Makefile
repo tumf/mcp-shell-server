@@ -5,6 +5,7 @@ test:
 
 format:
 	black .
+	isort .
 
 lint:
 	ruff check .
