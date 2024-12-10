@@ -1,3 +1,4 @@
+
 [project]
 name = "mcp-shell-server"
 version = "0.1.0"
@@ -18,8 +19,15 @@ mcp-shell-server = "mcp_shell_server.server:main"
 [project.optional-dependencies]
 test = [
     "pytest>=7.4.0",
-    "pytest-asyncio>=0.23.0",
+    "pytest-asyncio>=0.23.0", 
     "pytest-env>=1.1.0",
+]
+dev = [
+    "ruff>=0.0.262",
+    "black>=23.3.0",
+    "isort>=5.12.0",
+    "mypy>=1.2.0",
+    "pre-commit>=3.2.2",
 ]
 
 [build-system]
@@ -29,5 +37,28 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 testpaths = "tests"
-# Set default event loop scope for async tests
+# Set default event loop scope for async tests 
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+select = [
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "W",  # pycodestyle warnings
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.isort]
+profile = "black" 
+line_length = 88
