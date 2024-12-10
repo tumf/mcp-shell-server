@@ -1,5 +1,5 @@
-from .server import ShellServer, main
-from .shell_executor import ShellExecutor
+"""MCP Shell Server Package."""
+from .server import main
 
 __version__ = "0.1.0"
-__all__ = ["ShellServer", "ShellExecutor", "main"]
+__all__ = ["main"]

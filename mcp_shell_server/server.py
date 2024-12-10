@@ -52,14 +52,13 @@ class ExecuteToolHandler:
         
         result = await self.executor.execute(command, stdin)
         
+        # Raise error if command execution failed
+        if result.get("error"):
+            raise RuntimeError(result["error"])
+
         # Convert executor result to TextContent sequence
         content: list[TextContent] = []
         
-        if result.get("error"):
-            content.append(TextContent(
-                type="text",
-                text=result["error"]
-            ))
         if result.get("stdout"):
             content.append(TextContent(
                 type="text",
