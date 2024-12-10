@@ -1,26 +1,22 @@
-import os
 import asyncio
-from typing import Dict, List, Optional, Any
-from mcp_core import MCPServer, MCPRequest
+from mcp import Server
 from .shell_executor import ShellExecutor
 
-class ShellServer(MCPServer):
+
+class ShellServer(Server):
     def __init__(self):
         super().__init__()
         self.executor = ShellExecutor()
 
-    async def handle_request(self, request: MCPRequest) -> Dict[str, Any]:
-        command: List[str] = request.args.get("command", [])
-        stdin: Optional[str] = request.args.get("stdin")
-        
+    async def handle(self, args: dict) -> dict:
+        command = args.get("command", [])
+        stdin = args.get("stdin")
+
         if not command:
-            return {
-                "error": "No command provided",
-                "status": 1
-            }
-        
-        result = await self.executor.execute(command, stdin)
-        return result
+            return {"error": "No command provided", "status": 1}
+
+        return await self.executor.execute(command, stdin)
+
 
 def main():
     server = ShellServer()

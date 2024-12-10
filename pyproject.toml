@@ -6,9 +6,7 @@ authors = [
     { name = "tumf" }
 ]
 dependencies = [
-    "uvicorn>=0.27.0",
-    "fastapi>=0.109.0",
-    "mcp-core>=0.2.0",
+    "mcp>=1.1.0",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -17,9 +15,6 @@ license = { text = "MIT" }
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [project.scripts]
 mcp-shell-server = "mcp_shell_server.server:main"
