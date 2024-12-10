@@ -41,7 +41,7 @@ testpaths = "tests"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
-select = [
+lint.select = [
     "E",  # pycodestyle errors
     "F",  # pyflakes
     "W",  # pycodestyle warnings
@@ -49,7 +49,7 @@ select = [
     "C",  # flake8-comprehensions
     "B",  # flake8-bugbear
 ]
-ignore = [
+lint.ignore = [
     "E501",  # line too long, handled by black
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
