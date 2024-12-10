@@ -37,7 +37,7 @@ jobs:
 
       - name: Run ruff
         run: |
-          uv run ruff .
+          uv run ruff check .
 
       - name: Run black
         run: |
