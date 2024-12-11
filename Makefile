@@ -6,12 +6,21 @@ test:
 format:
 	black .
 	isort .
+	ruff check --fix .
+
 
 lint:
+	black --check .
+	isort --check .
 	ruff check .
+
+lint-fix:
+	ruff check --fix .
 
 typecheck:
 	mypy mcp_shell_server tests
 
 # Run all checks required before pushing
-check: format lint typecheck test
+check:  lint typecheck test
+
+all: check test format
