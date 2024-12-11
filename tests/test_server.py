@@ -1,5 +1,6 @@
 import os
 import tempfile
+
 import pytest
 from mcp.types import TextContent, Tool
 
@@ -104,7 +105,7 @@ async def test_call_tool_with_directory(temp_test_dir, monkeypatch):
 async def test_call_tool_with_file_operations(temp_test_dir, monkeypatch):
     """Test file operations in a specific directory"""
     monkeypatch.setenv("ALLOW_COMMANDS", "ls,cat")
-    
+
     # Create a test file
     test_file = os.path.join(temp_test_dir, "test.txt")
     with open(test_file, "w") as f:
@@ -141,7 +142,7 @@ async def test_call_tool_with_nonexistent_directory(monkeypatch):
 async def test_call_tool_with_file_as_directory(temp_test_dir, monkeypatch):
     """Test command execution with a file specified as directory"""
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
-    
+
     # Create a test file
     test_file = os.path.join(temp_test_dir, "test.txt")
     with open(test_file, "w") as f:
@@ -159,12 +160,12 @@ async def test_call_tool_with_file_as_directory(temp_test_dir, monkeypatch):
 async def test_call_tool_with_nested_directory(temp_test_dir, monkeypatch):
     """Test command execution in a nested directory"""
     monkeypatch.setenv("ALLOW_COMMANDS", "pwd,mkdir")
-    
+
     # Create a nested directory
     nested_dir = os.path.join(temp_test_dir, "nested")
     os.mkdir(nested_dir)
     nested_real_path = os.path.realpath(nested_dir)
-    
+
     result = await call_tool("execute", {
         "command": ["pwd"],
         "directory": nested_dir

@@ -1,6 +1,7 @@
 import os
-import pytest
 import tempfile
+
+import pytest
 
 from mcp_shell_server.shell_executor import ShellExecutor
 
@@ -99,7 +100,7 @@ async def test_execute_in_directory(executor, temp_test_dir, monkeypatch):
 async def test_execute_with_file_in_directory(executor, temp_test_dir, monkeypatch):
     """Test command execution with a file in the specified directory"""
     monkeypatch.setenv("ALLOW_COMMANDS", "ls,cat")
-    
+
     # Create a test file in the temporary directory
     test_file = os.path.join(temp_test_dir, "test.txt")
     with open(test_file, "w") as f:
@@ -108,7 +109,7 @@ async def test_execute_with_file_in_directory(executor, temp_test_dir, monkeypat
     # Test ls command
     result = await executor.execute(["ls"], directory=temp_test_dir)
     assert "test.txt" in result["stdout"]
-    
+
     # Test cat command
     result = await executor.execute(["cat", "test.txt"], directory=temp_test_dir)
     assert result["stdout"].strip() == "test content"
@@ -127,7 +128,7 @@ async def test_execute_with_nonexistent_directory(executor, monkeypatch):
 async def test_execute_with_file_as_directory(executor, temp_test_dir, monkeypatch):
     """Test command execution with a file specified as directory"""
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
-    
+
     # Create a test file
     test_file = os.path.join(temp_test_dir, "test.txt")
     with open(test_file, "w") as f:
@@ -152,12 +153,12 @@ async def test_execute_with_no_directory_specified(executor, monkeypatch):
 async def test_execute_with_nested_directory(executor, temp_test_dir, monkeypatch):
     """Test command execution in a nested directory"""
     monkeypatch.setenv("ALLOW_COMMANDS", "pwd,mkdir,ls")
-    
+
     # Create a nested directory
     nested_dir = os.path.join(temp_test_dir, "nested")
     os.mkdir(nested_dir)
     nested_real_path = os.path.realpath(nested_dir)
-    
+
     result = await executor.execute(["pwd"], directory=nested_dir)
     assert result["error"] is None
     assert result["status"] == 0
