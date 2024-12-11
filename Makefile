@@ -14,13 +14,10 @@ lint:
 	isort --check .
 	ruff check .
 
-lint-fix:
-	ruff check --fix .
-
 typecheck:
 	mypy mcp_shell_server tests
 
 # Run all checks required before pushing
 check:  lint typecheck test
-
-all: check test format
+fix: check format
+all: check
