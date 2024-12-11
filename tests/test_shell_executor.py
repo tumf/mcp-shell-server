@@ -1,4 +1,6 @@
+import os
 import pytest
+import tempfile
 
 from mcp_shell_server.shell_executor import ShellExecutor
 
@@ -6,6 +8,14 @@ from mcp_shell_server.shell_executor import ShellExecutor
 @pytest.fixture
 def executor():
     return ShellExecutor()
+
+
+@pytest.fixture
+def temp_test_dir():
+    """Create a temporary directory for testing"""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Return the real path to handle macOS /private/tmp symlink
+        yield os.path.realpath(tmpdirname)
 
 
 @pytest.mark.asyncio
@@ -72,3 +82,83 @@ async def test_shell_operators_not_allowed(executor, monkeypatch):
         result = await executor.execute(["echo", "hello", op])
         assert result["error"] == f"Unexpected shell operator: {op}"
         assert result["status"] == 1
+
+
+# New tests for directory functionality
+@pytest.mark.asyncio
+async def test_execute_in_directory(executor, temp_test_dir, monkeypatch):
+    """Test command execution in a specific directory"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "pwd")
+    result = await executor.execute(["pwd"], directory=temp_test_dir)
+    assert result["error"] is None
+    assert result["status"] == 0
+    assert result["stdout"].strip() == temp_test_dir
+
+
+@pytest.mark.asyncio
+async def test_execute_with_file_in_directory(executor, temp_test_dir, monkeypatch):
+    """Test command execution with a file in the specified directory"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls,cat")
+    
+    # Create a test file in the temporary directory
+    test_file = os.path.join(temp_test_dir, "test.txt")
+    with open(test_file, "w") as f:
+        f.write("test content")
+
+    # Test ls command
+    result = await executor.execute(["ls"], directory=temp_test_dir)
+    assert "test.txt" in result["stdout"]
+    
+    # Test cat command
+    result = await executor.execute(["cat", "test.txt"], directory=temp_test_dir)
+    assert result["stdout"].strip() == "test content"
+
+
+@pytest.mark.asyncio
+async def test_execute_with_nonexistent_directory(executor, monkeypatch):
+    """Test command execution with a non-existent directory"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
+    result = await executor.execute(["ls"], directory="/nonexistent/directory")
+    assert result["error"] == "Directory does not exist: /nonexistent/directory"
+    assert result["status"] == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_with_file_as_directory(executor, temp_test_dir, monkeypatch):
+    """Test command execution with a file specified as directory"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
+    
+    # Create a test file
+    test_file = os.path.join(temp_test_dir, "test.txt")
+    with open(test_file, "w") as f:
+        f.write("test content")
+
+    result = await executor.execute(["ls"], directory=test_file)
+    assert result["error"] == f"Not a directory: {test_file}"
+    assert result["status"] == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_with_no_directory_specified(executor, monkeypatch):
+    """Test command execution without specifying a directory"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "pwd")
+    result = await executor.execute(["pwd"])
+    assert result["error"] is None
+    assert result["status"] == 0
+    assert os.path.exists(result["stdout"].strip())
+
+
+@pytest.mark.asyncio
+async def test_execute_with_nested_directory(executor, temp_test_dir, monkeypatch):
+    """Test command execution in a nested directory"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "pwd,mkdir,ls")
+    
+    # Create a nested directory
+    nested_dir = os.path.join(temp_test_dir, "nested")
+    os.mkdir(nested_dir)
+    nested_real_path = os.path.realpath(nested_dir)
+    
+    result = await executor.execute(["pwd"], directory=nested_dir)
+    assert result["error"] is None
+    assert result["status"] == 0
+    assert result["stdout"].strip() == nested_real_path

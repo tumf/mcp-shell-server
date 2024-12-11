@@ -74,19 +74,40 @@ class ShellExecutor:
                         f"Command not allowed after {cleaned_arg}: {next_cmd}"
                     )
 
+    def _validate_directory(self, directory: Optional[str]) -> None:
+        """
+        Validate if the directory exists and is accessible.
+
+        Args:
+            directory (Optional[str]): Directory path to validate
+
+        Raises:
+            ValueError: If the directory doesn't exist or is not accessible
+        """
+        if directory is None:
+            return
+
+        if not os.path.exists(directory):
+            raise ValueError(f"Directory does not exist: {directory}")
+        if not os.path.isdir(directory):
+            raise ValueError(f"Not a directory: {directory}")
+        if not os.access(directory, os.R_OK | os.X_OK):
+            raise ValueError(f"Directory is not accessible: {directory}")
+
     def get_allowed_commands(self) -> list[str]:
         """Get the allowed commands"""
         return list(self._get_allowed_commands())
 
     async def execute(
-        self, command: List[str], stdin: Optional[str] = None
+        self, command: List[str], stdin: Optional[str] = None, directory: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Execute a shell command with optional stdin input.
+        Execute a shell command with optional stdin input and working directory.
 
         Args:
             command (List[str]): Command and its arguments
             stdin (Optional[str]): Input to be passed to the command via stdin
+            directory (Optional[str]): Working directory for command execution
 
         Returns:
             Dict[str, Any]: Execution result containing stdout, stderr, status code, and execution time.
@@ -101,6 +122,7 @@ class ShellExecutor:
                 raise ValueError("Empty command")
 
             self._validate_command(cleaned_command)
+            self._validate_directory(directory)
         except ValueError as e:
             return {
                 "error": str(e),
@@ -118,6 +140,7 @@ class ShellExecutor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env={"PATH": os.environ.get("PATH", "")},
+                cwd=directory,  # Set working directory if specified
             )
 
             stdin_bytes = stdin.encode() if stdin else None
@@ -129,6 +152,7 @@ class ShellExecutor:
                 "stderr": stderr.decode() if stderr else "",
                 "status": process.returncode,
                 "execution_time": time.time() - start_time,
+                "directory": directory,  # Include working directory in response
             }
         except FileNotFoundError:
             return {

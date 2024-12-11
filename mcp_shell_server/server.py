@@ -45,6 +45,10 @@ class ExecuteToolHandler:
                         "type": "string",
                         "description": "Input to be passed to the command via stdin",
                     },
+                    "directory": {
+                        "type": "string",
+                        "description": "Working directory where the command will be executed",
+                    },
                 },
                 "required": ["command"],
             },
@@ -54,11 +58,12 @@ class ExecuteToolHandler:
         """Execute the shell command with the given arguments"""
         command = arguments.get("command", [])
         stdin = arguments.get("stdin")
+        directory = arguments.get("directory")
 
         if not command:
             raise ValueError("No command provided")
 
-        result = await self.executor.execute(command, stdin)
+        result = await self.executor.execute(command, stdin, directory)
 
         # Raise error if command execution failed
         if result.get("error"):
