@@ -8,6 +8,7 @@ A secure shell command execution server implementing the Model Context Protocol 
 * **Standard Input Support**: Pass input to commands via stdin
 * **Comprehensive Output**: Returns stdout, stderr, exit status, and execution time
 * **Shell Operator Safety**: Validates commands after shell operators (; , &&, ||, |)
+* **Timeout Control**: Set maximum execution time for commands
 
 ## MCP client setting in your Claude.app
 
@@ -71,6 +72,19 @@ ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
     "command": ["cat"],
     "stdin": "Hello, World!"
 }
+
+# Command with timeout
+{
+    "command": ["long-running-process"],
+    "timeout": 30  # Maximum execution time in seconds
+}
+
+# Command with working directory and timeout
+{
+    "command": ["grep", "-r", "pattern"],
+    "directory": "/path/to/search",
+    "timeout": 60
+}
 ```
 
 ### Response Format
@@ -133,10 +147,12 @@ pytest
 
 ### Request Arguments
 
-| Field    | Type       | Required | Description                                   |
-|----------|------------|----------|-----------------------------------------------|
-| command  | string[]   | Yes      | Command and its arguments as array elements   |
-| stdin    | string     | No       | Input to be passed to the command            |
+| Field     | Type       | Required | Description                                   |
+|-----------|------------|----------|-----------------------------------------------|
+| command   | string[]   | Yes      | Command and its arguments as array elements   |
+| stdin     | string     | No       | Input to be passed to the command            |
+| directory | string     | No       | Working directory for command execution       |
+| timeout   | integer    | No       | Maximum execution time in seconds             |
 
 ### Response Fields
 
