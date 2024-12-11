@@ -11,6 +11,32 @@ A secure shell command execution server implementing the Model Context Protocol 
 
 ## MCP client setting in your Claude.app
 
+### Published version
+
+```shell
+code ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+```json
+{
+  "mcpServers": {
+    "shell": {
+      "command": "uvx",
+      "args": [
+        "mcp-shell-server"
+      ],
+      "env": {
+        "ALLOW_COMMANDS": "ls,cat,pwd,grep,wc,touch,find"
+      }
+    },
+  }
+}
+```
+
+### Local version
+
+#### Configuration
+
 ```shell
 code ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
@@ -34,7 +60,7 @@ code ~/Library/Application\ Support/Claude/claude_desktop_config.json
 }
 ```
 
-## Installation
+#### Installation
 
 ```bash
 pip install mcp-shell-server
