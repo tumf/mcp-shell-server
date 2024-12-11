@@ -18,7 +18,7 @@ app = Server("mcp-shell-server")
 class ExecuteToolHandler:
     """Handler for shell command execution"""
 
-    name = "execute"
+    name = "shell_execute"
     description = "Execute a shell command"
 
     def __init__(self):
