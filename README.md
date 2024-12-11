@@ -4,10 +4,35 @@ A secure shell command execution server implementing the Model Context Protocol 
 
 ## Features
 
-- **Secure Command Execution**: Only whitelisted commands can be executed
-- **Standard Input Support**: Pass input to commands via stdin
-- **Comprehensive Output**: Returns stdout, stderr, exit status, and execution time
-- **Shell Operator Safety**: Validates commands after shell operators (;, &&, ||, |)
+* **Secure Command Execution**: Only whitelisted commands can be executed
+* **Standard Input Support**: Pass input to commands via stdin
+* **Comprehensive Output**: Returns stdout, stderr, exit status, and execution time
+* **Shell Operator Safety**: Validates commands after shell operators (; , &&, ||, |)
+
+## MCP client setting in your Claude.app
+
+```shell
+code ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+```json
+{
+  "mcpServers": {
+    "shell": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        ".",
+        "run",
+        "mcp-shell-server"
+      ],
+      "env": {
+        "ALLOW_COMMANDS": "ls,cat,pwd,grep,wc,touch,find"
+      }
+    },
+  }
+}
+```
 
 ## Installation
 
@@ -26,6 +51,7 @@ ALLOW_COMMANDS="ls,cat,echo" uvx mcp-shell-server
 The `ALLOW_COMMANDS` environment variable specifies which commands are allowed to be executed. Commands can be separated by commas with optional spaces around them.
 
 Valid formats for ALLOW_COMMANDS:
+
 ```bash
 ALLOW_COMMANDS="ls,cat,echo"          # Basic format
 ALLOW_COMMANDS="ls ,echo, cat"        # With spaces
@@ -50,6 +76,7 @@ ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
 ### Response Format
 
 Successful response:
+
 ```json
 {
     "stdout": "command output",
@@ -60,6 +87,7 @@ Successful response:
 ```
 
 Error response:
+
 ```json
 {
     "error": "Command not allowed: rm",
@@ -83,12 +111,14 @@ The server implements several security measures:
 ### Setting up Development Environment
 
 1. Clone the repository
+
 ```bash
 git clone https://github.com/yourusername/mcp-shell-server.git
 cd mcp-shell-server
 ```
 
 2. Install dependencies including test requirements
+
 ```bash
 pip install -e ".[test]"
 ```
@@ -120,8 +150,8 @@ pytest
 
 ## Requirements
 
-- Python 3.11 or higher
-- mcp>=1.1.0
+* Python 3.11 or higher
+* mcp>=1.1.0
 
 ## License
 
