@@ -24,11 +24,15 @@ class ExecuteToolHandler:
     def __init__(self):
         self.executor = ShellExecutor()
 
+    def get_allowed_commands(self) -> list[str]:
+        """Get the allowed commands"""
+        return self.executor.get_allowed_commands()
+
     def get_tool_description(self) -> Tool:
         """Get the tool description for the execute command"""
         return Tool(
             name=self.name,
-            description=self.description,
+            description=f"{self.description}\nAllowed commands: {', '.join(self.get_allowed_commands())}",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -101,6 +105,7 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
 
 async def main() -> None:
     """Main entry point for the MCP shell server"""
+    logger.info("Starting MCP shell server")
     try:
         from mcp.server.stdio import stdio_server
 

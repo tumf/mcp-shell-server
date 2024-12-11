@@ -74,6 +74,10 @@ class ShellExecutor:
                         f"Command not allowed after {cleaned_arg}: {next_cmd}"
                     )
 
+    def get_allowed_commands(self) -> list[str]:
+        """Get the allowed commands"""
+        return list(self._get_allowed_commands())
+
     async def execute(
         self, command: List[str], stdin: Optional[str] = None
     ) -> Dict[str, Any]:
