@@ -91,10 +91,9 @@ async def test_call_tool_empty_command():
 async def test_call_tool_with_directory(temp_test_dir, monkeypatch):
     """Test command execution in a specific directory"""
     monkeypatch.setenv("ALLOW_COMMANDS", "pwd")
-    result = await call_tool("execute", {
-        "command": ["pwd"],
-        "directory": temp_test_dir
-    })
+    result = await call_tool(
+        "execute", {"command": ["pwd"], "directory": temp_test_dir}
+    )
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
     assert result[0].type == "text"
@@ -112,17 +111,13 @@ async def test_call_tool_with_file_operations(temp_test_dir, monkeypatch):
         f.write("test content")
 
     # Test ls command
-    result = await call_tool("execute", {
-        "command": ["ls"],
-        "directory": temp_test_dir
-    })
+    result = await call_tool("execute", {"command": ["ls"], "directory": temp_test_dir})
     assert "test.txt" in result[0].text
 
     # Test cat command
-    result = await call_tool("execute", {
-        "command": ["cat", "test.txt"],
-        "directory": temp_test_dir
-    })
+    result = await call_tool(
+        "execute", {"command": ["cat", "test.txt"], "directory": temp_test_dir}
+    )
     assert result[0].text.strip() == "test content"
 
 
@@ -131,10 +126,9 @@ async def test_call_tool_with_nonexistent_directory(monkeypatch):
     """Test command execution with a non-existent directory"""
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
     with pytest.raises(RuntimeError) as excinfo:
-        await call_tool("execute", {
-            "command": ["ls"],
-            "directory": "/nonexistent/directory"
-        })
+        await call_tool(
+            "execute", {"command": ["ls"], "directory": "/nonexistent/directory"}
+        )
     assert "Directory does not exist: /nonexistent/directory" in str(excinfo.value)
 
 
@@ -149,10 +143,7 @@ async def test_call_tool_with_file_as_directory(temp_test_dir, monkeypatch):
         f.write("test content")
 
     with pytest.raises(RuntimeError) as excinfo:
-        await call_tool("execute", {
-            "command": ["ls"],
-            "directory": test_file
-        })
+        await call_tool("execute", {"command": ["ls"], "directory": test_file})
     assert f"Not a directory: {test_file}" in str(excinfo.value)
 
 
@@ -166,8 +157,5 @@ async def test_call_tool_with_nested_directory(temp_test_dir, monkeypatch):
     os.mkdir(nested_dir)
     nested_real_path = os.path.realpath(nested_dir)
 
-    result = await call_tool("execute", {
-        "command": ["pwd"],
-        "directory": nested_dir
-    })
+    result = await call_tool("execute", {"command": ["pwd"], "directory": nested_dir})
     assert result[0].text.strip() == nested_real_path

@@ -99,7 +99,10 @@ class ShellExecutor:
         return list(self._get_allowed_commands())
 
     async def execute(
-        self, command: List[str], stdin: Optional[str] = None, directory: Optional[str] = None
+        self,
+        command: List[str],
+        stdin: Optional[str] = None,
+        directory: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute a shell command with optional stdin input and working directory.
