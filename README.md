@@ -75,15 +75,17 @@ pip install mcp-shell-server
 
 ```bash
 ALLOW_COMMANDS="ls,cat,echo" uvx mcp-shell-server
+# Or using the alias
+ALLOWED_COMMANDS="ls,cat,echo" uvx mcp-shell-server
 ```
 
-The `ALLOW_COMMANDS` environment variable specifies which commands are allowed to be executed. Commands can be separated by commas with optional spaces around them.
+The `ALLOW_COMMANDS` (or its alias `ALLOWED_COMMANDS` ) environment variable specifies which commands are allowed to be executed. Commands can be separated by commas with optional spaces around them.
 
-Valid formats for ALLOW_COMMANDS:
+Valid formats for ALLOW_COMMANDS or ALLOWED_COMMANDS:
 
 ```bash
 ALLOW_COMMANDS="ls,cat,echo"          # Basic format
-ALLOW_COMMANDS="ls ,echo, cat"        # With spaces
+ALLOWED_COMMANDS="ls ,echo, cat"      # With spaces (using alias)
 ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
 ```
 

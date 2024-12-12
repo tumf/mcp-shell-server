@@ -184,3 +184,39 @@ async def test_command_completes_within_timeout(executor, monkeypatch):
     assert result["error"] is None
     assert result["status"] == 0
     assert result["stdout"] == ""
+
+
+@pytest.mark.asyncio
+async def test_allowed_commands_alias(executor, monkeypatch):
+    """Test ALLOWED_COMMANDS alias functionality"""
+    monkeypatch.setenv("ALLOWED_COMMANDS", "echo")
+    result = await executor.execute(["echo", "hello"])
+    assert result["stdout"].strip() == "hello"
+    assert result["status"] == 0
+
+
+@pytest.mark.asyncio
+async def test_both_allow_commands_vars(executor, monkeypatch):
+    """Test both ALLOW_COMMANDS and ALLOWED_COMMANDS working together"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+    monkeypatch.setenv("ALLOWED_COMMANDS", "cat")
+
+    # Test command from ALLOW_COMMANDS
+    result1 = await executor.execute(["echo", "hello"])
+    assert result1["stdout"].strip() == "hello"
+    assert result1["status"] == 0
+
+    # Test command from ALLOWED_COMMANDS
+    result2 = await executor.execute(["cat"], stdin="world")
+    assert result2["stdout"].strip() == "world"
+    assert result2["status"] == 0
+
+
+@pytest.mark.asyncio
+async def test_allow_commands_precedence(executor, monkeypatch):
+    """Test that commands are combined from both environment variables"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls")
+    monkeypatch.setenv("ALLOWED_COMMANDS", "echo,cat")
+
+    allowed = executor.get_allowed_commands()
+    assert set(allowed) == {"echo", "ls", "cat"}

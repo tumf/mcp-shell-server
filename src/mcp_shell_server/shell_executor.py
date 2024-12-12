@@ -18,13 +18,15 @@ class ShellExecutor:
 
     def _get_allowed_commands(self) -> set:
         """
-        Get the set of allowed commands from environment variable.
-
-        Returns:
-            set: Set of allowed command names
+        Get the set of allowed commands from environment variables.
+        Checks both ALLOW_COMMANDS and ALLOWED_COMMANDS.
         """
         allow_commands = os.environ.get("ALLOW_COMMANDS", "")
-        return {cmd.strip() for cmd in allow_commands.split(",") if cmd.strip()}
+        allowed_commands = os.environ.get("ALLOWED_COMMANDS", "")
+
+        # Combine and deduplicate commands from both environment variables
+        commands = allow_commands + "," + allowed_commands
+        return {cmd.strip() for cmd in commands.split(",") if cmd.strip()}
 
     def _clean_command(self, command: List[str]) -> List[str]:
         """
