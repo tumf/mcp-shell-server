@@ -65,4 +65,7 @@ profile = "black"
 line_length = 88
 
 [tool.hatch.version]
-path = "mcp_shell_server/version.py"
+path = "src/mcp_shell_server/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_shell_server"]

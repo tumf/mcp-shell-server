@@ -1,6 +1,7 @@
 .PHONY: test format lint typecheck check
 
 test:
+	pip install -e .
 	pytest
 
 format:
@@ -15,7 +16,7 @@ lint:
 	ruff check .
 
 typecheck:
-	mypy mcp_shell_server tests
+	mypy src/mcp_shell_server tests
 
 # Run all checks required before pushing
 check:  lint typecheck test
