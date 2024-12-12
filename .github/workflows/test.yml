@@ -31,6 +31,15 @@ jobs:
           pip install -e ".[dev]"
           pip install -e ".[test]"
 
-      - name: Run tests
+      - name: Run lint and typecheck
         run: |
-          make test
+          make lint typecheck
+
+      - name: Run tests with coverage
+        run: |
+          pytest --cov --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
