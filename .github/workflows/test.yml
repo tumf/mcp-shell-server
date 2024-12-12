@@ -33,20 +33,4 @@ jobs:
 
       - name: Run tests
         run: |
-          uv run pytest
-
-      - name: Run ruff
-        run: |
-          uv run ruff check .
-
-      - name: Run black
-        run: |
-          uv run black . --check
-
-      - name: Run isort
-        run: |
-          uv run isort . --check-only
-
-      - name: Run mypy
-        run: |
-          uv run mypy mcp_shell_server tests
+          make test
