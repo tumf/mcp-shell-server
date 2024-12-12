@@ -1,8 +1,10 @@
 name: Publish
-
 on:
   push:
     branches: [main]
+    strategy:
+      matrix:
+        python-version: ["3.11"]
 
 jobs:
   test:
@@ -10,10 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         run: |
@@ -55,10 +57,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         run: |
