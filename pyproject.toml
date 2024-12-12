@@ -1,6 +1,5 @@
 [project]
 name = "mcp-shell-server"
-version = "0.1.0"
 description = "MCP Shell Server - Execute shell commands via MCP protocol"
 authors = [
     { name = "tumf" }
@@ -12,6 +11,7 @@ dependencies = [
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
+dynamic = ["version"]
 
 [project.scripts]
 mcp-shell-server = "mcp_shell_server:main"
@@ -63,3 +63,6 @@ target-version = ['py311']
 [tool.isort]
 profile = "black" 
 line_length = 88
+
+[tool.hatch.version]
+path = "mcp_shell_server/version.py"

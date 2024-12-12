@@ -1,7 +1,8 @@
 name: Publish
 on:
   push:
-    branches: [main]
+    tags:
+      - "v*"
     strategy:
       matrix:
         python-version: ["3.11"]
@@ -56,6 +57,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Update version from tag
+        run: |
+          # Strip 'v' prefix from tag and update version.py
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "__version__ = \"${VERSION}\"" > mcp_shell_server/version.py
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
