@@ -31,22 +31,15 @@ jobs:
           pip install -e ".[dev]"
           pip install -e ".[test]"
 
-      - name: Run tests
+      - name: Run lint and typecheck
         run: |
-          uv run pytest
+          make lint typecheck
 
-      - name: Run ruff
+      - name: Run tests with coverage
         run: |
-          uv run ruff check .
+          pytest --cov --cov-report=xml
 
-      - name: Run black
-        run: |
-          uv run black . --check
-
-      - name: Run isort
-        run: |
-          uv run isort . --check-only
-
-      - name: Run mypy
-        run: |
-          uv run mypy mcp_shell_server tests
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
