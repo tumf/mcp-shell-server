@@ -163,3 +163,24 @@ async def test_execute_with_nested_directory(executor, temp_test_dir, monkeypatc
     assert result["error"] is None
     assert result["status"] == 0
     assert result["stdout"].strip() == nested_real_path
+
+
+@pytest.mark.asyncio
+async def test_command_timeout(executor, monkeypatch):
+    """Test command timeout functionality"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
+    result = await executor.execute(["sleep", "2"], timeout=1)
+    assert result["error"] == "Command timed out after 1 seconds"
+    assert result["status"] == -1
+    assert result["stdout"] == ""
+    assert result["stderr"] == "Command timed out after 1 seconds"
+
+
+@pytest.mark.asyncio
+async def test_command_completes_within_timeout(executor, monkeypatch):
+    """Test command that completes within timeout period"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
+    result = await executor.execute(["sleep", "1"], timeout=2)
+    assert result["error"] is None
+    assert result["status"] == 0
+    assert result["stdout"] == ""

@@ -103,6 +103,7 @@ class ShellExecutor:
         command: List[str],
         stdin: Optional[str] = None,
         directory: Optional[str] = None,
+        timeout: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Execute a shell command with optional stdin input and working directory.
@@ -111,6 +112,7 @@ class ShellExecutor:
             command (List[str]): Command and its arguments
             stdin (Optional[str]): Input to be passed to the command via stdin
             directory (Optional[str]): Working directory for command execution
+            timeout (Optional[int]): Timeout for command execution in seconds
 
         Returns:
             Dict[str, Any]: Execution result containing stdout, stderr, status code, and execution time.
@@ -146,17 +148,36 @@ class ShellExecutor:
                 cwd=directory,  # Set working directory if specified
             )
 
-            stdin_bytes = stdin.encode() if stdin else None
-            stdout, stderr = await process.communicate(input=stdin_bytes)
+            try:
+                stdin_bytes = stdin.encode() if stdin else None
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(input=stdin_bytes), timeout=timeout
+                )
 
-            return {
-                "error": None,  # Set error field to None for success case
-                "stdout": stdout.decode() if stdout else "",
-                "stderr": stderr.decode() if stderr else "",
-                "status": process.returncode,
-                "execution_time": time.time() - start_time,
-                "directory": directory,  # Include working directory in response
-            }
+                return {
+                    "error": None,
+                    "stdout": stdout.decode() if stdout else "",
+                    "stderr": stderr.decode() if stderr else "",
+                    "status": process.returncode,
+                    "execution_time": time.time() - start_time,
+                    "directory": directory,
+                }
+
+            except asyncio.TimeoutError:
+                try:
+                    process.kill()
+                    await process.wait()
+                except ProcessLookupError:
+                    pass
+
+                return {
+                    "error": f"Command timed out after {timeout} seconds",
+                    "status": -1,
+                    "stdout": "",
+                    "stderr": f"Command timed out after {timeout} seconds",
+                    "execution_time": time.time() - start_time,
+                }
+
         except FileNotFoundError:
             return {
                 "error": f"Command not found: {cleaned_command[0]}",

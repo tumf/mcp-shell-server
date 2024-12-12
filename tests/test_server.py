@@ -168,3 +168,20 @@ async def test_call_tool_with_nested_directory(temp_test_dir, monkeypatch):
     )
     assert isinstance(result[0], TextContent)
     assert result[0].text.strip() == nested_real_path
+
+
+@pytest.mark.asyncio
+async def test_call_tool_with_timeout(monkeypatch):
+    """Test command execution with timeout"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
+    with pytest.raises(RuntimeError) as excinfo:
+        await call_tool("shell_execute", {"command": ["sleep", "2"], "timeout": 1})
+    assert "Command timed out after 1 seconds" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_call_tool_completes_within_timeout(monkeypatch):
+    """Test command that completes within timeout period"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
+    result = await call_tool("shell_execute", {"command": ["sleep", "1"], "timeout": 2})
+    assert len(result) == 0  # sleep command produces no output

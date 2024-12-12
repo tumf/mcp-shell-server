@@ -49,6 +49,11 @@ class ExecuteToolHandler:
                         "type": "string",
                         "description": "Working directory where the command will be executed",
                     },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Maximum execution time in seconds",
+                        "minimum": 0,
+                    },
                 },
                 "required": ["command"],
             },
@@ -59,11 +64,12 @@ class ExecuteToolHandler:
         command = arguments.get("command", [])
         stdin = arguments.get("stdin")
         directory = arguments.get("directory")
+        timeout = arguments.get("timeout")
 
         if not command:
             raise ValueError("No command provided")
 
-        result = await self.executor.execute(command, stdin, directory)
+        result = await self.executor.execute(command, stdin, directory, timeout)
 
         # Raise error if command execution failed
         if result.get("error"):
