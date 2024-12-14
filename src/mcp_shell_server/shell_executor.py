@@ -44,7 +44,7 @@ class ShellExecutor:
     def _create_shell_command(self, command: List[str]) -> str:
         """
         Create a shell command string from a list of arguments.
-        Properly escapes all arguments to prevent shell injection.
+        Wildcards (*?[]) are preserved for shell expansion.
 
         Args:
             command (List[str]): Command and its arguments
@@ -52,7 +52,13 @@ class ShellExecutor:
         Returns:
             str: Shell-safe command string
         """
-        return " ".join(shlex.quote(arg) for arg in command)
+        escaped_args = []
+        for arg in command:
+            if any(char in arg for char in "*?[]"):
+                escaped_args.append(arg)
+            else:
+                escaped_args.append(shlex.quote(arg))
+        return " ".join(escaped_args)
 
     def _validate_command(self, command: List[str]) -> None:
         """
