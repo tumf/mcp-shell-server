@@ -1,4 +1,5 @@
 .PHONY: test format lint typecheck check
+.DEFAULT_GOAL := all
 
 test:
 	pip install -e .
@@ -21,4 +22,4 @@ typecheck:
 # Run all checks required before pushing
 check:  lint typecheck test
 fix: check format
-all: check
+all: check test

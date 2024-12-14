@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shlex
 import time
 from typing import Any, Dict, List, Optional
 
@@ -39,6 +40,19 @@ class ShellExecutor:
             List[str]: Cleaned command with trimmed whitespace
         """
         return [arg.strip() for arg in command if arg.strip()]
+
+    def _create_shell_command(self, command: List[str]) -> str:
+        """
+        Create a shell command string from a list of arguments.
+        Properly escapes all arguments to prevent shell injection.
+
+        Args:
+            command (List[str]): Command and its arguments
+
+        Returns:
+            str: Shell-safe command string
+        """
+        return " ".join(shlex.quote(arg) for arg in command)
 
     def _validate_command(self, command: List[str]) -> None:
         """
@@ -140,9 +154,10 @@ class ShellExecutor:
             }
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                cleaned_command[0],
-                *cleaned_command[1:],
+            # Create shell command and execute it
+            shell_command = self._create_shell_command(cleaned_command)
+            process = await asyncio.create_subprocess_shell(
+                shell_command,
                 stdin=asyncio.subprocess.PIPE if stdin else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
