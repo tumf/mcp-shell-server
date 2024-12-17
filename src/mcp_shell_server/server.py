@@ -115,15 +115,6 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
     except Exception as e:
         logger.error(traceback.format_exc())
         logger.error(f"Error during call_tool: {str(e)}")
-        raise RuntimeError(str(e)) from e
-
-        logger.error(traceback.format_exc())
-        logger.error(f"Error during call_tool: {str(e)}")
-        raise RuntimeError(str(e)) from e
-
-
-        logger.error(traceback.format_exc())
-        logger.error(f"Error during call_tool: {str(e)}")
         raise RuntimeError(f"Error executing command: {str(e)}") from e
 
 

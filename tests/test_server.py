@@ -201,7 +201,7 @@ async def test_invalid_command_parameter():
 @pytest.mark.asyncio
 async def test_disallowed_command(monkeypatch):
     """Test error handling for disallowed command"""
-    monkeypatch.setenv("ALLOW_COMMANDS", "ls") # Add allowed command
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls")  # Add allowed command
     with pytest.raises(RuntimeError) as exc:
         await call_tool(
             "shell_execute",

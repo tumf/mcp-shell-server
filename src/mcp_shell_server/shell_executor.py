@@ -419,10 +419,8 @@ class ShellExecutor:
                 return await self._execute_pipeline(commands, directory, timeout)
 
             # Then check for other shell operators
-            print("cleaned_command", cleaned_command)
             for token in cleaned_command:
                 if token in [";", "&&", "||"]:
-                    print("token", token)
                     return {
                         "error": f"Unexpected shell operator: {token}",
                         "status": 1,
@@ -590,7 +588,6 @@ class ShellExecutor:
 
             for i, cmd in enumerate(parsed_commands):
                 shell_cmd = self._create_shell_command(cmd)
-                print(f"Executing command {i}: {shell_cmd}")  # デバッグ出力
 
                 process = await asyncio.create_subprocess_shell(
                     shell_cmd,
@@ -606,26 +603,15 @@ class ShellExecutor:
                         process.communicate(input=prev_stdout), timeout=timeout
                     )
 
-                    # デバッグ出力
-                    print(f"Command {i} stdout: {stdout!r}")
-                    print(f"Command {i} stderr: {stderr!r}")
-
-                    # 次のコマンドへの入力として使用
                     prev_stdout = stdout if stdout else b""
 
-                    # 最後のコマンドの場合は最終出力として保存
                     if i == len(parsed_commands) - 1:
                         final_stdout = stdout if stdout else b""
 
-                    # エラー出力を累積
                     final_stderr += stderr if stderr else b""
                     processes.append(process)
 
-                    # エラーチェック
                     if process.returncode != 0:
-                        print(
-                            f"Command {i} failed with code {process.returncode}"
-                        )  # デバッグ出力
                         raise ValueError(
                             f"Command failed with exit code {process.returncode}"
                         )
@@ -634,15 +620,11 @@ class ShellExecutor:
                     process.kill()
                     raise
 
-            # 出力の処理
             if last_stdout:
-                # ファイルにリイレクトされている場合
                 last_stdout.write(final_stdout.decode("utf-8", errors="replace"))
                 final_output = ""
             else:
-                # 標準出力に出力する場合
                 final_output = final_stdout.decode("utf-8", errors="replace")
-                print(f"Final output: {final_output!r}")  # デバッグ出力
 
             return {
                 "error": None,
@@ -654,7 +636,6 @@ class ShellExecutor:
             }
 
         except Exception as e:
-            print(f"Pipeline error: {str(e)}")  # デバッグ出力
             return {
                 "error": str(e),
                 "stdout": "",
