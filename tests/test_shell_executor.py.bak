@@ -1,6 +1,5 @@
 import os
 import tempfile
-from typing import IO
 
 import pytest
 
@@ -502,71 +501,3 @@ def test_validate_pipeline(executor, monkeypatch):
         executor._validate_pipeline(["echo", "hello", "|", "grep", "h", "&&", "ls"])
     assert "Unexpected shell operator in pipeline: &&" in str(exc.value)
     assert executor._preprocess_command([]) == []
-
-
-def test_redirection_path_validation(executor):
-    """Test validation of redirection paths"""
-    # Test missing output redirection path
-    with pytest.raises(ValueError, match="Missing path for output redirection"):
-        executor._parse_command(["echo", "hello", ">"])
-
-    # Test missing input redirection path
-    with pytest.raises(ValueError, match="Missing path for input redirection"):
-        executor._parse_command(["cat", "<"])
-
-    # Test operator as redirection target
-    with pytest.raises(ValueError, match="Invalid redirection target: operator found"):
-        executor._parse_command(["echo", "hello", ">", ">"])
-
-    # Test multiple operators
-    with pytest.raises(ValueError, match="Invalid redirection target: operator found"):
-        executor._parse_command(["echo", "hello", ">", ">>", "file.txt"])
-
-
-@pytest.mark.asyncio
-async def test_io_handle_close(executor, temp_test_dir, monkeypatch, mocker):
-    """Test IO handle closing functionality"""
-    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
-    test_file = os.path.join(temp_test_dir, "test.txt")
-
-    # Create file handler that will raise IOError on close
-    mock_file = mocker.MagicMock(spec=IO)
-    mock_file.close.side_effect = IOError("Failed to close file")
-
-    # Patch the open function to return our mock
-    mocker.patch("builtins.open", return_value=mock_file)
-    await executor.execute(["echo", "hello", ">", test_file], directory=temp_test_dir)
-
-    # Verify our mock's close method was called
-    assert mock_file.close.called
-
-
-def test_preprocess_command_pipeline(executor):
-    """Test pipeline command preprocessing functionality"""
-    # Test empty command
-    assert executor._preprocess_command([]) == []
-
-    # Test single command without pipe
-    assert executor._preprocess_command(["echo", "hello"]) == ["echo", "hello"]
-
-    # Test simple pipe
-    assert executor._preprocess_command(["echo", "hello", "|", "grep", "h"]) == [
-        "echo",
-        "hello",
-        "|",
-        "grep",
-        "h",
-    ]
-
-    # Test multiple pipes
-    assert executor._preprocess_command(
-        ["cat", "file", "|", "grep", "pattern", "|", "wc", "-l"]
-    ) == ["cat", "file", "|", "grep", "pattern", "|", "wc", "-l"]
-
-    # Test command with attached pipe operator
-    assert executor._preprocess_command(["echo|", "grep", "pattern"]) == [
-        "echo",
-        "|",
-        "grep",
-        "pattern",
-    ]

@@ -2,8 +2,7 @@
 .DEFAULT_GOAL := all
 
 test:
-	pip install -e .
-	pytest
+	uv run pytest
 
 format:
 	black .
@@ -19,7 +18,10 @@ lint:
 typecheck:
 	mypy src/mcp_shell_server tests
 
+coverage:
+	pytest --cov=src/mcp_shell_server tests
+
 # Run all checks required before pushing
 check:  lint typecheck test
 fix: check format
-all: check test
+all: format check coverage
