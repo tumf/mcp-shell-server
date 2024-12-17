@@ -77,10 +77,10 @@ async def test_multiple_commands_with_operator(executor, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_shell_operators_not_allowed(executor, monkeypatch):
-    monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls")
-    operators = [";", "&&", "||", "|"]
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls,true")
+    operators = [";", "&&", "||"]
     for op in operators:
-        result = await executor.execute(["echo", "hello", op])
+        result = await executor.execute(["echo", "hello", op, "true"])
         assert result["error"] == f"Unexpected shell operator: {op}"
         assert result["status"] == 1
 
@@ -220,3 +220,171 @@ async def test_allow_commands_precedence(executor, monkeypatch):
 
     allowed = executor.get_allowed_commands()
     assert set(allowed) == {"echo", "ls", "cat"}
+
+
+@pytest.mark.asyncio
+async def test_pipe_operator(executor, monkeypatch):
+    """Test that pipe operator works correctly"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep")
+    result = await executor.execute(["echo", "hello\nworld", "|", "grep", "world"])
+    assert result["error"] is None
+    assert result["status"] == 0
+    assert result["stdout"].strip() == "world"
+
+
+@pytest.mark.asyncio
+async def test_pipe_commands(executor, temp_test_dir, monkeypatch):
+    """Test piping commands together"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep,cut,tr")
+    result = await executor.execute(["echo", "hello world", "|", "grep", "world"])
+    assert result["stdout"].strip() == "hello world"
+
+    # Test multiple pipes
+    result = await executor.execute(
+        ["echo", "hello world", "|", "cut", "-d", " ", "-f2", "|", "tr", "a-z", "A-Z"]
+    )
+    assert result["stdout"].strip() == "WORLD"
+
+
+@pytest.mark.asyncio
+async def test_output_redirection(executor, temp_test_dir, monkeypatch):
+    """Test output redirection with > operator"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,cat")
+    output_file = os.path.join(temp_test_dir, "out.txt")
+
+    # Test > redirection
+    result = await executor.execute(
+        ["echo", "hello", ">", output_file], directory=temp_test_dir
+    )
+    assert result["error"] is None
+    assert result["status"] == 0
+
+    # Verify file contents
+    with open(output_file) as f:
+        assert f.read().strip() == "hello"
+
+    # Test >> redirection (append)
+    result = await executor.execute(
+        ["echo", "world", ">>", output_file], directory=temp_test_dir
+    )
+    assert result["error"] is None
+    assert result["status"] == 0
+
+    # Verify appended contents
+    with open(output_file) as f:
+        lines = f.readlines()
+        assert lines[0].strip() == "hello"
+        assert lines[1].strip() == "world"
+
+
+@pytest.mark.asyncio
+async def test_input_redirection(executor, temp_test_dir, monkeypatch):
+    """Test input redirection with < operator"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "cat")
+    input_file = os.path.join(temp_test_dir, "in.txt")
+
+    # Create input file
+    with open(input_file, "w") as f:
+        f.write("test content")
+
+    # Test < redirection
+    result = await executor.execute(["cat", "<", input_file], directory=temp_test_dir)
+    assert result["error"] is None
+    assert result["status"] == 0
+    assert result["stdout"].strip() == "test content"
+
+
+@pytest.mark.asyncio
+async def test_combined_redirections(executor, temp_test_dir, monkeypatch):
+    """Test combining input and output redirection"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "cat,tr")
+    input_file = os.path.join(temp_test_dir, "in.txt")
+    output_file = os.path.join(temp_test_dir, "out.txt")
+
+    # Create input file
+    with open(input_file, "w") as f:
+        f.write("hello world")
+
+    # Test < and > redirection together
+    result = await executor.execute(
+        ["cat", "<", input_file, "|", "tr", "[:lower:]", "[:upper:]", ">", output_file],
+        directory=temp_test_dir,
+    )
+    assert result["error"] is None
+    assert result["status"] == 0
+
+    # Verify output file
+    with open(output_file) as f:
+        assert f.read().strip() == "HELLO WORLD"
+
+
+@pytest.mark.asyncio
+async def test_redirection_error_cases(executor, temp_test_dir, monkeypatch):
+    """Test error cases for redirections"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,cat")
+
+    # Missing output file path
+    result = await executor.execute(["echo", "hello", ">"], directory=temp_test_dir)
+    assert result["error"] == "Missing path for output redirection"
+
+    # Missing input file path
+    result = await executor.execute(["cat", "<"], directory=temp_test_dir)
+    assert result["error"] == "Missing path for input redirection"
+
+    # Non-existent input file
+    result = await executor.execute(
+        ["cat", "<", "nonexistent.txt"], directory=temp_test_dir
+    )
+    assert "No such file or directory" in result["error"]
+
+    # Invalid redirection operator
+    result = await executor.execute(
+        ["echo", "hello", ">", ">", "test.txt"], directory=temp_test_dir
+    )
+    assert result["error"] == "Invalid redirection target: operator found"
+
+    # Operator as path
+    result = await executor.execute(
+        ["echo", "hello", ">", ">"], directory=temp_test_dir
+    )
+    assert result["error"] == "Invalid redirection target: operator found"
+
+
+@pytest.mark.asyncio
+async def test_complex_pipeline_with_redirections(executor, temp_test_dir, monkeypatch):
+    """Test complex pipeline with multiple redirections"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep,tr,cat")
+    input_file = os.path.join(temp_test_dir, "pipeline_input.txt")
+    output_file = os.path.join(temp_test_dir, "pipeline_output.txt")
+
+    # Create input file
+    with open(input_file, "w") as f:
+        f.write("hello\nworld\ntest\nHELLO\n")
+
+    # Complex pipeline: cat < input | grep l | tr a-z A-Z > output
+    result = await executor.execute(
+        [
+            "cat",
+            "<",
+            input_file,
+            "|",
+            "grep",
+            "l",
+            "|",
+            "tr",
+            "a-z",
+            "A-Z",
+            ">",
+            output_file,
+        ],
+        directory=temp_test_dir,
+    )
+    assert result["error"] is None
+    assert result["status"] == 0
+
+    # Verify output file
+    with open(output_file) as f:
+        lines = f.readlines()
+        assert len(lines) == 2
+        assert lines[0].strip() == "HELLO"
+        assert lines[1].strip() == "WORLD"
