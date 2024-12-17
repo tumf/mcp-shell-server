@@ -388,3 +388,22 @@ async def test_complex_pipeline_with_redirections(executor, temp_test_dir, monke
         assert len(lines) == 2
         assert lines[0].strip() == "HELLO"
         assert lines[1].strip() == "WORLD"
+
+
+@pytest.mark.asyncio
+async def test_directory_permissions(executor, temp_test_dir, monkeypatch):
+    """Test command execution with directory permission issues"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
+
+    # Create a directory with no execute permission
+    no_exec_dir = os.path.join(temp_test_dir, "no_exec_dir")
+    os.mkdir(no_exec_dir)
+    os.chmod(no_exec_dir, 0o600)  # Remove execute permission
+
+    try:
+        result = await executor.execute(["ls"], directory=no_exec_dir)
+        assert result["error"] == f"Directory is not accessible: {no_exec_dir}"
+        assert result["status"] == 1
+    finally:
+        # Restore permissions for cleanup
+        os.chmod(no_exec_dir, 0o700)

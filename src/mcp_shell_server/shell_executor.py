@@ -378,6 +378,18 @@ class ShellExecutor:
         start_time = time.time()
 
         try:
+            # Validate directory if specified
+            try:
+                self._validate_directory(directory)
+            except ValueError as e:
+                return {
+                    "error": str(e),
+                    "status": 1,
+                    "stdout": "",
+                    "stderr": str(e),
+                    "execution_time": time.time() - start_time,
+                }
+
             # Preprocess command to handle pipe operators
             preprocessed_command = self._preprocess_command(command)
             cleaned_command = self._clean_command(preprocessed_command)
