@@ -19,7 +19,10 @@ lint:
 typecheck:
 	mypy src/mcp_shell_server tests
 
+coverage:
+	pytest --cov=src/mcp_shell_server tests
+
 # Run all checks required before pushing
 check:  lint typecheck test
 fix: check format
-all: check test
+all: check test coverage
