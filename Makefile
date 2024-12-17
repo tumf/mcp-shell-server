@@ -24,4 +24,4 @@ coverage:
 # Run all checks required before pushing
 check:  lint typecheck test
 fix: check format
-all: format check test coverage
+all: format check coverage
