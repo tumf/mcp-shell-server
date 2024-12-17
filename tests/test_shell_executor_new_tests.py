@@ -1,3 +1,7 @@
+import asyncio
+import os
+import tempfile
+
 import pytest
 
 from mcp_shell_server.shell_executor import ShellExecutor
@@ -30,3 +34,43 @@ async def test_process_redirections_invalid_output(executor):
     with pytest.raises(ValueError) as exc:
         executor._process_redirections(["echo", "hello", ">"])
     assert str(exc.value) == "Missing path for output redirection"
+
+
+@pytest.mark.asyncio
+async def test_setup_redirects_stdin(executor):
+    """Test _setup_redirects method with stdin redirection"""
+    # Create a temporary file with test content
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+        f.write("test content\n")
+        input_file = f.name
+
+    try:
+        redirects = {"stdin": input_file, "stdout": None, "stdout_append": False}
+        handles = await executor._setup_redirects(redirects)
+
+        assert handles["stdin"] == asyncio.subprocess.PIPE
+        assert "stdin_data" in handles
+        assert handles["stdin_data"] == "test content\n"
+        assert handles["stdout"] == asyncio.subprocess.PIPE
+        assert handles["stderr"] == asyncio.subprocess.PIPE
+
+        await executor._cleanup_handles(handles)
+    finally:
+        os.unlink(input_file)
+
+
+@pytest.mark.asyncio
+async def test_setup_redirects_stdout_error(executor):
+    """Test _setup_redirects with output file open error"""
+    # Create a read-only directory
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        output_file = os.path.join(tmpdirname, "out.txt")
+        os.chmod(tmpdirname, 0o555)  # Read and execute only
+
+        try:
+            redirects = {"stdin": None, "stdout": output_file, "stdout_append": False}
+            with pytest.raises(ValueError) as exc:
+                await executor._setup_redirects(redirects)
+            assert "Failed to open output file" in str(exc.value)
+        finally:
+            os.chmod(tmpdirname, 0o755)  # Restore permissions
