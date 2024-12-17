@@ -269,7 +269,7 @@ class ShellExecutor:
                     raise ValueError("Empty command before pipe operator")
                 self._validate_command(current_cmd)
                 current_cmd = []
-            elif token in [";" "&&", "||"]:
+            elif token in [";" , "&&", "||"]:
                 raise ValueError(f"Unexpected shell operator in pipeline: {token}")
             else:
                 current_cmd.append(token)
