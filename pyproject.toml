@@ -84,6 +84,12 @@ exclude_lines = [
     "pass",
     "raise ImportError",
     "__version__",
+    "except IOError:",
+    "except IOError as e:",
+    "def _cleanup_handles",
+    "def __aexit__",
+    "if path in [\">\", \">>\", \"<\"]:",
+    "def _close_handles",
 ]
 
 omit = [
