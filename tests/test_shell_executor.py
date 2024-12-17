@@ -429,16 +429,19 @@ def test_create_shell_command(executor):
     """Test shell command creation with various input combinations"""
     # Test basic command
     assert executor._create_shell_command(["echo", "hello"]) == "echo hello"
-    
+
     # Test command with space-only argument
     assert executor._create_shell_command(["echo", " "]) == "echo ' '"
-    
+
     # Test command with wildcards
     assert executor._create_shell_command(["ls", "*.txt"]) == "ls '*.txt'"
-    
+
     # Test command with special characters
-    assert executor._create_shell_command(["echo", "hello;", "world"]) == "echo 'hello;' world"
-    
+    assert (
+        executor._create_shell_command(["echo", "hello;", "world"])
+        == "echo 'hello;' world"
+    )
+
     # Test empty command
     assert executor._create_shell_command([]) == ""
 
@@ -447,7 +450,7 @@ def test_preprocess_command(executor):
     """Test command preprocessing for pipeline handling"""
     # Test basic command
     assert executor._preprocess_command(["ls"]) == ["ls"]
-    
+
     # Test command with separate pipe
     assert executor._preprocess_command(["ls", "|", "grep", "test"]) == [
         "ls",
@@ -455,7 +458,7 @@ def test_preprocess_command(executor):
         "grep",
         "test",
     ]
-    
+
     # Test command with attached pipe
     assert executor._preprocess_command(["ls|", "grep", "test"]) == [
         "ls",
@@ -463,7 +466,7 @@ def test_preprocess_command(executor):
         "grep",
         "test",
     ]
-    
+
     # Test command with special operators
     assert executor._preprocess_command(["echo", "hello", "&&", "ls"]) == [
         "echo",
@@ -471,7 +474,7 @@ def test_preprocess_command(executor):
         "&&",
         "ls",
     ]
-    
+
     # Test empty command
     assert executor._preprocess_command([]) == []
 
