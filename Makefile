@@ -2,8 +2,7 @@
 .DEFAULT_GOAL := all
 
 test:
-	pip install -e .
-	pytest
+	uv run pytest
 
 format:
 	black .
