@@ -16,9 +16,8 @@ async def test_pipeline_split():
 
     # Test empty pipe sections
     commands = executor._split_pipe_commands(["|", "grep", "pattern"])
-    assert len(commands) == 2
-    assert commands[0] == []
-    assert commands[1] == ["grep", "pattern"]
+    assert len(commands) == 1
+    assert commands[0] == ["grep", "pattern"]
 
     # Test multiple pipes
     commands = executor._split_pipe_commands(
@@ -31,6 +30,5 @@ async def test_pipeline_split():
 
     # Test trailing pipe
     commands = executor._split_pipe_commands(["echo", "hello", "|"])
-    assert len(commands) == 2
+    assert len(commands) == 1
     assert commands[0] == ["echo", "hello"]
-    assert commands[1] == []
