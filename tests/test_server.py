@@ -211,3 +211,93 @@ async def test_disallowed_command(monkeypatch):
             },
         )
     assert "Command not allowed: sudo" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_call_tool_with_stderr(monkeypatch):
+    """Test command execution with stderr output"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
+    result = await call_tool(
+        "shell_execute",
+        {"command": ["ls", "/nonexistent/directory"]},
+    )
+    assert len(result) >= 1
+    stderr_content = next(
+        (c for c in result if isinstance(c, TextContent) and "No such file" in c.text),
+        None,
+    )
+    assert stderr_content is not None
+    assert stderr_content.type == "text"
+
+
+@pytest.mark.asyncio
+async def test_main_server(mocker):
+    """Test the main server function"""
+    # Mock the stdio_server
+    mock_read_stream = mocker.AsyncMock()
+    mock_write_stream = mocker.AsyncMock()
+
+    # Create an async context manager mock
+    context_manager = mocker.AsyncMock()
+    context_manager.__aenter__ = mocker.AsyncMock(
+        return_value=(mock_read_stream, mock_write_stream)
+    )
+    context_manager.__aexit__ = mocker.AsyncMock(return_value=None)
+
+    # Set up stdio_server mock to return a regular function that returns the context manager
+    def stdio_server_impl():
+        return context_manager
+
+    mock_stdio_server = mocker.Mock(side_effect=stdio_server_impl)
+
+    # Mock app.run and create_initialization_options
+    mock_server_run = mocker.patch("mcp_shell_server.server.app.run")
+    mock_create_init_options = mocker.patch(
+        "mcp_shell_server.server.app.create_initialization_options"
+    )
+
+    # Import main after setting up mocks
+    from mcp_shell_server.server import main
+
+    # Execute main function
+    mocker.patch("mcp.server.stdio.stdio_server", mock_stdio_server)
+    await main()
+
+    # Verify interactions
+    mock_stdio_server.assert_called_once()
+    context_manager.__aenter__.assert_awaited_once()
+    context_manager.__aexit__.assert_awaited_once()
+    mock_server_run.assert_called_once_with(
+        mock_read_stream, mock_write_stream, mock_create_init_options.return_value
+    )
+
+
+@pytest.mark.asyncio
+async def test_main_server_error_handling(mocker):
+    """Test error handling in the main server function"""
+    # Mock app.run to raise an exception
+    mocker.patch(
+        "mcp_shell_server.server.app.run", side_effect=RuntimeError("Test error")
+    )
+
+    # Mock the stdio_server
+    context_manager = mocker.AsyncMock()
+    context_manager.__aenter__ = mocker.AsyncMock(
+        return_value=(mocker.AsyncMock(), mocker.AsyncMock())
+    )
+    context_manager.__aexit__ = mocker.AsyncMock(return_value=None)
+
+    def stdio_server_impl():
+        return context_manager
+
+    mock_stdio_server = mocker.Mock(side_effect=stdio_server_impl)
+
+    # Import main after setting up mocks
+    from mcp_shell_server.server import main
+
+    # Execute main function and expect it to raise the error
+    mocker.patch("mcp.server.stdio.stdio_server", mock_stdio_server)
+    with pytest.raises(RuntimeError) as exc:
+        await main()
+
+    assert str(exc.value) == "Test error"

@@ -255,8 +255,8 @@ wheels = [
 
 [[package]]
 name = "mcp"
-version = "1.1.2"
-source = { registry = "https://pypi.org/simple" }
+version = "1.0.1.dev0"
+source = { git = "https://github.com/tumf/mcp-python-sdk.git?rev=fix%2Fhandle-cancelled-notifications#8017b7047fdd6ad496153b3f74b1f2d4a2a820dd" }
 dependencies = [
     { name = "anyio" },
     { name = "httpx" },
@@ -264,10 +264,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "sse-starlette" },
     { name = "starlette" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9b/f3/5cf212e60681ea6da0dbb6e0d1bc0ab2dbf5eebc749b69663d46f114fea1/mcp-1.1.2.tar.gz", hash = "sha256:694aa9df7a8641b24953c935eb72c63136dc948981021525a0add199bdfee402", size = 57628 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/40/9883eac3718b860d4006eba1920bfcb628f0a1fe37fac46a4f4e391edca6/mcp-1.1.2-py3-none-any.whl", hash = "sha256:a4d32d60fd80a1702440ba4751b847a8a88957a1f7b059880953143e9759965a", size = 36652 },
 ]
 
 [[package]]
@@ -300,7 +296,7 @@ requires-dist = [
     { name = "asyncio", specifier = ">=3.4.3" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.3.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
-    { name = "mcp", specifier = ">=1.1.2" },
+    { name = "mcp", git = "https://github.com/tumf/mcp-python-sdk.git?rev=fix%2Fhandle-cancelled-notifications" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.2.2" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.4.0" },

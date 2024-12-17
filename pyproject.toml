@@ -6,7 +6,7 @@ authors = [
 ]
 dependencies = [
     "asyncio>=3.4.3",
-    "mcp>=1.1.2",
+    "mcp @ git+https://github.com/tumf/mcp-python-sdk.git@fix/handle-cancelled-notifications",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -70,3 +70,23 @@ path = "src/mcp_shell_server/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_shell_server"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
+    "__version__",
+]
+
+omit = [
+    "src/mcp_shell_server/__init__.py",
+    "src/mcp_shell_server/version.py",
+]
