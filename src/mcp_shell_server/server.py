@@ -70,11 +70,14 @@ class ExecuteToolHandler:
         if not command:
             raise ValueError("No command provided")
 
+        if not isinstance(command, list):
+            raise ValueError("'command' must be an array")
+
         result = await self.executor.execute(command, stdin, directory, timeout)
 
         # Raise error if command execution failed
         if result.get("error"):
-            raise RuntimeError(result["error"])
+            raise ValueError(result["error"])  # Changed from RuntimeError to ValueError
 
         # Convert executor result to TextContent sequence
         content: list[TextContent] = []
@@ -110,6 +113,15 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
         return await tool_handler.run_tool(arguments)
 
     except Exception as e:
+        logger.error(traceback.format_exc())
+        logger.error(f"Error during call_tool: {str(e)}")
+        raise RuntimeError(str(e)) from e
+
+        logger.error(traceback.format_exc())
+        logger.error(f"Error during call_tool: {str(e)}")
+        raise RuntimeError(str(e)) from e
+
+
         logger.error(traceback.format_exc())
         logger.error(f"Error during call_tool: {str(e)}")
         raise RuntimeError(f"Error executing command: {str(e)}") from e

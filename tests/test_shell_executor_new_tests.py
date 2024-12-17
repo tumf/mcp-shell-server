@@ -74,3 +74,25 @@ async def test_setup_redirects_stdout_error(executor):
             assert "Failed to open output file" in str(exc.value)
         finally:
             os.chmod(tmpdirname, 0o755)  # Restore permissions
+
+
+@pytest.mark.asyncio
+async def test_process_redirections_consecutive_operators(executor):
+    """Test process_redirections with consecutive redirection operators"""
+    with pytest.raises(ValueError) as exc:
+        executor._validate_redirection_syntax(["echo", "hello", ">", ">", "output.txt"])
+    assert str(exc.value) == "Invalid redirection syntax: consecutive operators"
+
+
+@pytest.mark.asyncio
+async def test_process_redirections_input_and_output(executor):
+    """Test process_redirections with both input and output redirections"""
+    command = ["cat", "<", "input.txt", ">", "output.txt"]
+    processed_command, redirections = executor._process_redirections(command)
+
+    assert processed_command == ["cat"]
+    assert redirections == {
+        "stdin": "input.txt",
+        "stdout": "output.txt",
+        "stdout_append": False,
+    }

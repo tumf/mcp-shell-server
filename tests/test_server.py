@@ -185,3 +185,29 @@ async def test_call_tool_completes_within_timeout(monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
     result = await call_tool("shell_execute", {"command": ["sleep", "1"], "timeout": 2})
     assert len(result) == 0  # sleep command produces no output
+
+
+@pytest.mark.asyncio
+async def test_invalid_command_parameter():
+    """Test error handling for invalid command parameter"""
+    with pytest.raises(RuntimeError) as exc:  # Changed from ValueError to RuntimeError
+        await call_tool(
+            "shell_execute",
+            {"command": "not_an_array", "directory": "/tmp"},  # Should be an array
+        )
+    assert "'command' must be an array" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_disallowed_command(monkeypatch):
+    """Test error handling for disallowed command"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls") # Add allowed command
+    with pytest.raises(RuntimeError) as exc:
+        await call_tool(
+            "shell_execute",
+            {
+                "command": ["sudo", "reboot"],  # Not in allowed commands
+                "directory": "/tmp",
+            },
+        )
+    assert "Command not allowed: sudo" in str(exc.value)
