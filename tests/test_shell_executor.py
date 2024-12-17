@@ -407,3 +407,94 @@ async def test_directory_permissions(executor, temp_test_dir, monkeypatch):
     finally:
         # Restore permissions for cleanup
         os.chmod(no_exec_dir, 0o700)
+
+
+def test_validate_redirection_syntax(executor):
+    """Test validation of redirection syntax with various input combinations"""
+    # Valid cases
+    executor._validate_redirection_syntax(["echo", "hello", ">", "file.txt"])
+    executor._validate_redirection_syntax(["cat", "<", "input.txt", ">", "output.txt"])
+
+    # Test consecutive operators
+    with pytest.raises(ValueError) as exc:
+        executor._validate_redirection_syntax(["echo", "text", ">", ">", "file.txt"])
+    assert str(exc.value) == "Invalid redirection syntax: consecutive operators"
+
+    with pytest.raises(ValueError) as exc:
+        executor._validate_redirection_syntax(["cat", "<", "<", "input.txt"])
+    assert str(exc.value) == "Invalid redirection syntax: consecutive operators"
+
+
+def test_create_shell_command(executor):
+    """Test shell command creation with various input combinations"""
+    # Test basic command
+    assert executor._create_shell_command(["echo", "hello"]) == "echo hello"
+    
+    # Test command with space-only argument
+    assert executor._create_shell_command(["echo", " "]) == "echo ' '"
+    
+    # Test command with wildcards
+    assert executor._create_shell_command(["ls", "*.txt"]) == "ls '*.txt'"
+    
+    # Test command with special characters
+    assert executor._create_shell_command(["echo", "hello;", "world"]) == "echo 'hello;' world"
+    
+    # Test empty command
+    assert executor._create_shell_command([]) == ""
+
+
+def test_preprocess_command(executor):
+    """Test command preprocessing for pipeline handling"""
+    # Test basic command
+    assert executor._preprocess_command(["ls"]) == ["ls"]
+    
+    # Test command with separate pipe
+    assert executor._preprocess_command(["ls", "|", "grep", "test"]) == [
+        "ls",
+        "|",
+        "grep",
+        "test",
+    ]
+    
+    # Test command with attached pipe
+    assert executor._preprocess_command(["ls|", "grep", "test"]) == [
+        "ls",
+        "|",
+        "grep",
+        "test",
+    ]
+    
+    # Test command with special operators
+    assert executor._preprocess_command(["echo", "hello", "&&", "ls"]) == [
+        "echo",
+        "hello",
+        "&&",
+        "ls",
+    ]
+    
+    # Test empty command
+    assert executor._preprocess_command([]) == []
+
+
+def test_validate_pipeline(executor, monkeypatch):
+    """Test pipeline validation"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep,cat")
+
+    # Test valid pipeline
+    executor._validate_pipeline(["echo", "hello", "|", "grep", "h"])
+
+    # Test empty command before pipe
+    with pytest.raises(ValueError) as exc:
+        executor._validate_pipeline(["|", "grep", "test"])
+    assert str(exc.value) == "Empty command before pipe operator"
+
+    # Test disallowed commands in pipeline
+    with pytest.raises(ValueError) as exc:
+        executor._validate_pipeline(["rm", "|", "grep", "test"])
+    assert "Command not allowed: rm" in str(exc.value)
+
+    # Test shell operators in pipeline
+    with pytest.raises(ValueError) as exc:
+        executor._validate_pipeline(["echo", "hello", "|", "grep", "h", "&&", "ls"])
+    assert "Unexpected shell operator in pipeline: &&" in str(exc.value)
+    assert executor._preprocess_command([]) == []
