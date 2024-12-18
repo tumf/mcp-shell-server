@@ -386,6 +386,7 @@ class ShellExecutor:
         timeout: Optional[int] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
+        process = None  # Initialize process variable
 
         try:
             # Validate directory if specified
@@ -590,6 +591,11 @@ class ShellExecutor:
                 "stderr": str(e),
                 "execution_time": time.time() - start_time,
             }
+        finally:
+            # Ensure process is terminated
+            if process and process.returncode is None:
+                process.kill()
+                await process.wait()
 
     async def _execute_pipeline(
         self,
@@ -692,5 +698,10 @@ class ShellExecutor:
             }
 
         finally:
+            # Ensure all processes are terminated
+            for process in processes:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
             if isinstance(last_stdout, IO):
                 last_stdout.close()
