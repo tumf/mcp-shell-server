@@ -76,3 +76,5 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+prompt.md

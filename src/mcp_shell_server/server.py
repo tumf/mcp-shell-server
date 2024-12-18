@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import traceback
 from collections.abc import Sequence
@@ -56,7 +57,7 @@ class ExecuteToolHandler:
                         "minimum": 0,
                     },
                 },
-                "required": ["command"],
+                "required": ["command", "directory"],
             },
         )
 
@@ -64,25 +65,42 @@ class ExecuteToolHandler:
         """Execute the shell command with the given arguments"""
         command = arguments.get("command", [])
         stdin = arguments.get("stdin")
-        directory = arguments.get("directory")
+        directory = arguments.get("directory", "/tmp")  # default to /tmp for safety
         timeout = arguments.get("timeout")
 
         if not command:
             raise ValueError("No command provided")
 
-        result = await self.executor.execute(command, stdin, directory, timeout)
+        if not isinstance(command, list):
+            raise ValueError("'command' must be an array")
 
-        # Raise error if command execution failed
-        if result.get("error"):
-            raise RuntimeError(result["error"])
+        # Make sure directory exists
+        if not directory:
+            raise ValueError("Directory is required")
 
-        # Convert executor result to TextContent sequence
         content: list[TextContent] = []
+        try:
+            # Handle execution with timeout
+            try:
+                result = await asyncio.wait_for(
+                    self.executor.execute(
+                        command, directory, stdin, None
+                    ),  # Pass None for timeout
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError as e:
+                raise ValueError("Command execution timed out") from e
 
-        if result.get("stdout"):
-            content.append(TextContent(type="text", text=result["stdout"]))
-        if result.get("stderr"):
-            content.append(TextContent(type="text", text=result["stderr"]))
+            if result.get("error"):
+                raise ValueError(result["error"])
+
+            if result.get("stdout"):
+                content.append(TextContent(type="text", text=result["stdout"]))
+            if result.get("stderr"):
+                content.append(TextContent(type="text", text=result["stderr"]))
+
+        except asyncio.TimeoutError as e:
+            raise ValueError(f"Command timed out after {timeout} seconds") from e
 
         return content
 
@@ -111,7 +129,6 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
 
     except Exception as e:
         logger.error(traceback.format_exc())
-        logger.error(f"Error during call_tool: {str(e)}")
         raise RuntimeError(f"Error executing command: {str(e)}") from e
 
 
