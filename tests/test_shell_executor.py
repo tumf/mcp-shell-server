@@ -7,6 +7,11 @@ import pytest
 from mcp_shell_server.shell_executor import ShellExecutor
 
 
+def clear_env(monkeypatch):
+    monkeypatch.delenv("ALLOW_COMMANDS", raising=False)
+    monkeypatch.delenv("ALLOWED_COMMANDS", raising=False)
+
+
 @pytest.fixture
 def executor():
     return ShellExecutor()
@@ -22,6 +27,7 @@ def temp_test_dir():
 
 @pytest.mark.asyncio
 async def test_basic_command_execution(executor, temp_test_dir, monkeypatch):
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
     result = await executor.execute(["echo", "hello"], temp_test_dir)
     assert result["stdout"].strip() == "hello"
@@ -30,6 +36,7 @@ async def test_basic_command_execution(executor, temp_test_dir, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stdin_input(executor, temp_test_dir, monkeypatch):
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
     result = await executor.execute(["cat"], temp_test_dir, stdin="hello world")
     assert result["stdout"].strip() == "hello world"
@@ -38,6 +45,7 @@ async def test_stdin_input(executor, temp_test_dir, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_command_with_space_allowed(executor, temp_test_dir, monkeypatch):
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
     result = await executor.execute(["cat "], temp_test_dir, stdin="hello world")
     assert result["error"] is None
@@ -47,6 +55,7 @@ async def test_command_with_space_allowed(executor, temp_test_dir, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_command_not_allowed(executor, temp_test_dir, monkeypatch):
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
     result = await executor.execute(["rm", "-rf", "/"], temp_test_dir)
     assert result["error"] == "Command not allowed: rm"
@@ -64,6 +73,7 @@ async def test_empty_command(executor, temp_test_dir):
 async def test_command_with_space_in_allow_commands(
     executor, temp_test_dir, monkeypatch
 ):
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "ls, echo ,cat")
     result = await executor.execute(["echo", "test"], temp_test_dir)
     assert result["stdout"].strip() == "test"
@@ -72,6 +82,7 @@ async def test_command_with_space_in_allow_commands(
 
 @pytest.mark.asyncio
 async def test_multiple_commands_with_operator(executor, temp_test_dir, monkeypatch):
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls")
     result = await executor.execute(["echo", "hello", ";"], temp_test_dir)
     assert result["error"] == "Unexpected shell operator: ;"
@@ -80,6 +91,7 @@ async def test_multiple_commands_with_operator(executor, temp_test_dir, monkeypa
 
 @pytest.mark.asyncio
 async def test_shell_operators_not_allowed(executor, temp_test_dir, monkeypatch):
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls,true")
     operators = [";", "&&", "||"]
     for op in operators:
@@ -92,6 +104,7 @@ async def test_shell_operators_not_allowed(executor, temp_test_dir, monkeypatch)
 @pytest.mark.asyncio
 async def test_execute_in_directory(executor, temp_test_dir, monkeypatch):
     """Test command execution in a specific directory"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "pwd")
     result = await executor.execute(["pwd"], directory=temp_test_dir)
     assert result["error"] is None
@@ -102,6 +115,7 @@ async def test_execute_in_directory(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_execute_with_file_in_directory(executor, temp_test_dir, monkeypatch):
     """Test command execution with a file in the specified directory"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "ls,cat")
 
     # Create a test file in the temporary directory
@@ -121,6 +135,7 @@ async def test_execute_with_file_in_directory(executor, temp_test_dir, monkeypat
 @pytest.mark.asyncio
 async def test_execute_with_nonexistent_directory(executor, monkeypatch):
     """Test command execution with a non-existent directory"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
     result = await executor.execute(["ls"], directory="/nonexistent/directory")
     assert result["error"] == "Directory does not exist: /nonexistent/directory"
@@ -130,6 +145,7 @@ async def test_execute_with_nonexistent_directory(executor, monkeypatch):
 @pytest.mark.asyncio
 async def test_execute_with_file_as_directory(executor, temp_test_dir, monkeypatch):
     """Test command execution with a file specified as directory"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
 
     # Create a test file
@@ -145,6 +161,7 @@ async def test_execute_with_file_as_directory(executor, temp_test_dir, monkeypat
 @pytest.mark.asyncio
 async def test_execute_with_nested_directory(executor, temp_test_dir, monkeypatch):
     """Test command execution in a nested directory"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "pwd,mkdir,ls")
 
     # Create a nested directory
@@ -161,6 +178,7 @@ async def test_execute_with_nested_directory(executor, temp_test_dir, monkeypatc
 @pytest.mark.asyncio
 async def test_command_timeout(executor, temp_test_dir, monkeypatch):
     """Test command timeout functionality"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
     result = await executor.execute(["sleep", "2"], temp_test_dir, timeout=1)
     assert result["error"] == "Command timed out after 1 seconds"
@@ -172,6 +190,7 @@ async def test_command_timeout(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_command_completes_within_timeout(executor, temp_test_dir, monkeypatch):
     """Test command that completes within timeout period"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
     result = await executor.execute(["sleep", "1"], temp_test_dir, timeout=2)
     assert result["error"] is None
@@ -182,6 +201,7 @@ async def test_command_completes_within_timeout(executor, temp_test_dir, monkeyp
 @pytest.mark.asyncio
 async def test_allowed_commands_alias(executor, temp_test_dir, monkeypatch):
     """Test ALLOWED_COMMANDS alias functionality"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOWED_COMMANDS", "echo")
     result = await executor.execute(["echo", "hello"], temp_test_dir)
     assert result["stdout"].strip() == "hello"
@@ -191,6 +211,7 @@ async def test_allowed_commands_alias(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_both_allow_commands_vars(executor, temp_test_dir, monkeypatch):
     """Test both ALLOW_COMMANDS and ALLOWED_COMMANDS working together"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
     monkeypatch.setenv("ALLOWED_COMMANDS", "cat")
 
@@ -208,6 +229,7 @@ async def test_both_allow_commands_vars(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_allow_commands_precedence(executor, temp_test_dir, monkeypatch):
     """Test that commands are combined from both environment variables"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls")
     monkeypatch.setenv("ALLOWED_COMMANDS", "echo,cat")
 
@@ -218,6 +240,7 @@ async def test_allow_commands_precedence(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_pipe_operator(executor, temp_test_dir, monkeypatch):
     """Test that pipe operator works correctly"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep")
     result = await executor.execute(
         ["echo", "hello\nworld", "|", "grep", "world"], temp_test_dir
@@ -230,6 +253,7 @@ async def test_pipe_operator(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_pipe_commands(executor, temp_test_dir, monkeypatch):
     """Test piping commands together"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep,cut,tr")
     result = await executor.execute(
         ["echo", "hello world", "|", "grep", "world"], temp_test_dir
@@ -247,6 +271,7 @@ async def test_pipe_commands(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_output_redirection(executor, temp_test_dir, monkeypatch):
     """Test output redirection with > operator"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,cat")
     output_file = os.path.join(temp_test_dir, "out.txt")
 
@@ -278,6 +303,7 @@ async def test_output_redirection(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_input_redirection(executor, temp_test_dir, monkeypatch):
     """Test input redirection with < operator"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
     input_file = os.path.join(temp_test_dir, "in.txt")
 
@@ -295,6 +321,7 @@ async def test_input_redirection(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_combined_redirections(executor, temp_test_dir, monkeypatch):
     """Test combining input and output redirection"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "cat,tr")
     input_file = os.path.join(temp_test_dir, "in.txt")
     output_file = os.path.join(temp_test_dir, "out.txt")
@@ -319,6 +346,7 @@ async def test_combined_redirections(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_redirection_error_cases(executor, temp_test_dir, monkeypatch):
     """Test error cases for redirections"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,cat")
 
     # Missing output file path
@@ -351,6 +379,7 @@ async def test_redirection_error_cases(executor, temp_test_dir, monkeypatch):
 @pytest.mark.asyncio
 async def test_complex_pipeline_with_redirections(executor, temp_test_dir, monkeypatch):
     """Test complex pipeline with multiple redirections"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep,tr,cat")
     input_file = os.path.join(temp_test_dir, "pipeline_input.txt")
     output_file = os.path.join(temp_test_dir, "pipeline_output.txt")
@@ -391,6 +420,7 @@ async def test_complex_pipeline_with_redirections(executor, temp_test_dir, monke
 @pytest.mark.asyncio
 async def test_directory_permissions(executor, temp_test_dir, monkeypatch):
     """Test command execution with directory permission issues"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
 
     # Create a directory with no execute permission
@@ -479,7 +509,9 @@ def test_preprocess_command(executor):
 
 def test_validate_pipeline(executor, monkeypatch):
     """Test pipeline validation"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep,cat")
+    monkeypatch.setenv("ALLOWED_COMMANDS", "echo,grep,cat")
 
     # Test valid pipeline
     executor._validate_pipeline(["echo", "hello", "|", "grep", "h"])
@@ -523,6 +555,7 @@ def test_redirection_path_validation(executor):
 @pytest.mark.asyncio
 async def test_io_handle_close(executor, temp_test_dir, monkeypatch, mocker):
     """Test IO handle closing functionality"""
+    clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
     test_file = os.path.join(temp_test_dir, "test.txt")
 

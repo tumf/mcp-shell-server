@@ -81,12 +81,15 @@ class ExecuteToolHandler:
         content: list[TextContent] = []
         try:
             # Handle execution with timeout
-            result = await asyncio.wait_for(
-                self.executor.execute(
-                    command, directory, stdin, None
-                ),  # Pass None for timeout
-                timeout=timeout,
-            )
+            try:
+                result = await asyncio.wait_for(
+                    self.executor.execute(
+                        command, directory, stdin, None
+                    ),  # Pass None for timeout
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError as e:
+                raise ValueError("Command execution timed out") from e
 
             if result.get("error"):
                 raise ValueError(result["error"])
