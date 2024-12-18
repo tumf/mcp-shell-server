@@ -142,6 +142,7 @@ async def test_execute_with_file_as_directory(executor, temp_test_dir, monkeypat
     assert result["status"] == 1
 
 
+@pytest.mark.asyncio
 async def test_execute_with_nested_directory(executor, temp_test_dir, monkeypatch):
     """Test command execution in a nested directory"""
     monkeypatch.setenv("ALLOW_COMMANDS", "pwd,mkdir,ls")
