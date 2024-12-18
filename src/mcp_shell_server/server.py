@@ -56,7 +56,7 @@ class ExecuteToolHandler:
                         "minimum": 0,
                     },
                 },
-                "required": ["command"],
+                "required": ["command", "directory"],
             },
         )
 

@@ -27,8 +27,8 @@ async def test_list_tools():
     assert tool.inputSchema["type"] == "object"
     assert "command" in tool.inputSchema["properties"]
     assert "stdin" in tool.inputSchema["properties"]
-    assert "directory" in tool.inputSchema["properties"]  # New assertion
-    assert tool.inputSchema["required"] == ["command"]
+    assert "directory" in tool.inputSchema["properties"]
+    assert tool.inputSchema["required"] == ["command", "directory"]
 
 
 @pytest.mark.asyncio
