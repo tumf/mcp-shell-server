@@ -27,15 +27,18 @@ async def test_list_tools():
     assert tool.inputSchema["type"] == "object"
     assert "command" in tool.inputSchema["properties"]
     assert "stdin" in tool.inputSchema["properties"]
-    assert "directory" in tool.inputSchema["properties"]  # New assertion
-    assert tool.inputSchema["required"] == ["command"]
+    assert "directory" in tool.inputSchema["properties"]
+    assert tool.inputSchema["required"] == ["command", "directory"]
 
 
 @pytest.mark.asyncio
-async def test_call_tool_valid_command(monkeypatch):
+async def test_call_tool_valid_command(monkeypatch, temp_test_dir):
     """Test execution of a valid command"""
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
-    result = await call_tool("shell_execute", {"command": ["echo", "hello world"]})
+    result = await call_tool(
+        "shell_execute",
+        {"command": ["echo", "hello world"], "directory": temp_test_dir},
+    )
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
     assert result[0].type == "text"
@@ -43,11 +46,12 @@ async def test_call_tool_valid_command(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_call_tool_with_stdin(monkeypatch):
+async def test_call_tool_with_stdin(monkeypatch, temp_test_dir):
     """Test command execution with stdin"""
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
     result = await call_tool(
-        "shell_execute", {"command": ["cat"], "stdin": "test input"}
+        "shell_execute",
+        {"command": ["cat"], "stdin": "test input", "directory": temp_test_dir},
     )
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
@@ -56,11 +60,14 @@ async def test_call_tool_with_stdin(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_call_tool_invalid_command(monkeypatch):
+async def test_call_tool_invalid_command(monkeypatch, temp_test_dir):
     """Test execution of an invalid command"""
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
     with pytest.raises(RuntimeError) as excinfo:
-        await call_tool("shell_execute", {"command": ["invalid_command"]})
+        await call_tool(
+            "shell_execute",
+            {"command": ["invalid_command"], "directory": temp_test_dir},
+        )
     assert "Command not allowed: invalid_command" in str(excinfo.value)
 
 

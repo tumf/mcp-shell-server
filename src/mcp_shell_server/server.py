@@ -56,7 +56,7 @@ class ExecuteToolHandler:
                         "minimum": 0,
                     },
                 },
-                "required": ["command"],
+                "required": ["command", "directory"],
             },
         )
 
@@ -64,7 +64,7 @@ class ExecuteToolHandler:
         """Execute the shell command with the given arguments"""
         command = arguments.get("command", [])
         stdin = arguments.get("stdin")
-        directory = arguments.get("directory")
+        directory = arguments.get("directory", "/tmp")  # default to /tmp for safety
         timeout = arguments.get("timeout")
 
         if not command:
@@ -73,7 +73,11 @@ class ExecuteToolHandler:
         if not isinstance(command, list):
             raise ValueError("'command' must be an array")
 
-        result = await self.executor.execute(command, stdin, directory, timeout)
+        # Make sure directory exists
+        if not directory:
+            raise ValueError("Directory is required")
+
+        result = await self.executor.execute(command, directory, stdin, timeout)
 
         # Raise error if command execution failed
         if result.get("error"):

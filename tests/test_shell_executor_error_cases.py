@@ -1,8 +1,18 @@
 import asyncio
+import os
+import tempfile
 
 import pytest
 
 from mcp_shell_server.shell_executor import ShellExecutor
+
+
+@pytest.fixture
+def temp_test_dir():
+    """Create a temporary directory for testing"""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Return the real path to handle macOS /private/tmp symlink
+        yield os.path.realpath(tmpdirname)
 
 
 @pytest.mark.asyncio
@@ -43,7 +53,7 @@ async def test_shell_operator_validation():
 
 
 @pytest.mark.asyncio
-async def test_process_execution_timeout(monkeypatch):
+async def test_process_execution_timeout(monkeypatch, temp_test_dir):
     """Test process execution timeout handling"""
     monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
     executor = ShellExecutor()
@@ -51,15 +61,15 @@ async def test_process_execution_timeout(monkeypatch):
     # プロセスのタイムアウトをテスト
     command = ["sleep", "5"]
     with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(executor.execute(command), timeout=0.1)
+        await asyncio.wait_for(executor.execute(command, temp_test_dir), timeout=0.1)
 
 
 @pytest.mark.asyncio
-async def test_process_failure(monkeypatch):
+async def test_process_failure(monkeypatch, temp_test_dir):
     """Test handling of process execution failure"""
     monkeypatch.setenv("ALLOW_COMMANDS", "false")
     executor = ShellExecutor()
 
     # falseコマンドは常に終了コード1を返す
-    result = await executor.execute(["false"])
+    result = await executor.execute(["false"], temp_test_dir)
     assert result["status"] == 1

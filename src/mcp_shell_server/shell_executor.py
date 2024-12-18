@@ -238,11 +238,14 @@ class ShellExecutor:
             directory (Optional[str]): Directory path to validate
 
         Raises:
-            ValueError: If the directory doesn't exist or is not accessible
+            ValueError: If the directory doesn't exist, not absolute or is not accessible
         """
+        # make directory required
         if directory is None:
-            return
-
+            raise ValueError("Directory is required")
+        # verify directory is absolute path
+        if not os.path.isabs(directory):
+            raise ValueError(f"Directory must be an absolute path: {directory}")
         if not os.path.exists(directory):
             raise ValueError(f"Directory does not exist: {directory}")
         if not os.path.isdir(directory):
@@ -371,8 +374,8 @@ class ShellExecutor:
     async def execute(
         self,
         command: List[str],
+        directory: str,
         stdin: Optional[str] = None,
-        directory: Optional[str] = None,
         timeout: Optional[int] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
