@@ -6,7 +6,7 @@ authors = [
 ]
 dependencies = [
     "asyncio>=3.4.3",
-    "mcp @ git+https://github.com/tumf/mcp-python-sdk.git@fix/handle-cancelled-notifications",
+    "mcp>=1.1.2",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
