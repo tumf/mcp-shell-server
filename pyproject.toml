@@ -41,6 +41,10 @@ asyncio_mode = "strict"
 testpaths = "tests"
 # Set default event loop scope for async tests 
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore::RuntimeWarning:selectors:",
+    "ignore::pytest.PytestUnhandledCoroutineWarning:",
+]
 
 [tool.ruff]
 lint.select = [

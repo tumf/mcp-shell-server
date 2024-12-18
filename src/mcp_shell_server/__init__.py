@@ -1,15 +1,17 @@
 """MCP Shell Server Package."""
 
-import asyncio
-
 from . import server
+
+__version__ = "0.1.0"
+__all__ = ["main", "server"]
 
 
 def main():
     """Main entry point for the package."""
+    import asyncio
+
     asyncio.run(server.main())
 
 
-# Optionally expose other important items at package level
-__all__ = ["main", "server"]
-__version__ = "0.1.0"
+if __name__ == "__main__":
+    main()

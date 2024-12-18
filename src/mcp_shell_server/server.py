@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import traceback
 from collections.abc import Sequence
@@ -56,7 +57,7 @@ class ExecuteToolHandler:
                         "minimum": 0,
                     },
                 },
-                "required": ["command"],
+                "required": ["command", "directory"],
             },
         )
 
@@ -64,7 +65,7 @@ class ExecuteToolHandler:
         """Execute the shell command with the given arguments"""
         command = arguments.get("command", [])
         stdin = arguments.get("stdin")
-        directory = arguments.get("directory")
+        directory = arguments.get("directory", "/tmp")  # default to /tmp for safety
         timeout = arguments.get("timeout")
 
         if not command:
@@ -73,14 +74,20 @@ class ExecuteToolHandler:
         if not isinstance(command, list):
             raise ValueError("'command' must be an array")
 
-        result = await self.executor.execute(command, stdin, directory, timeout)
+        # Make sure directory exists
+        if not directory:
+            raise ValueError("Directory is required")
 
-        # Raise error if command execution failed
-        if result.get("error"):
-            raise ValueError(result["error"])  # Changed from RuntimeError to ValueError
+        try:
+            result = await self.executor.execute(command, directory, stdin, timeout)
+        except asyncio.TimeoutError as e:
+            raise ValueError(f"Command timed out after {timeout} seconds") from e
 
         # Convert executor result to TextContent sequence
         content: list[TextContent] = []
+
+        if result.get("error"):
+            raise ValueError(result["error"])
 
         if result.get("stdout"):
             content.append(TextContent(type="text", text=result["stdout"]))
@@ -114,7 +121,6 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
 
     except Exception as e:
         logger.error(traceback.format_exc())
-        logger.error(f"Error during call_tool: {str(e)}")
         raise RuntimeError(f"Error executing command: {str(e)}") from e
 
 

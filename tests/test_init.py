@@ -17,4 +17,7 @@ def test_main(mocker):
     # The first argument of the call should be a coroutine object
     args = mock_run.call_args[0]
     assert len(args) == 1
-    assert asyncio.iscoroutine(args[0])
+    coro = args[0]
+    assert asyncio.iscoroutine(coro)
+    # Clean up the coroutine
+    coro.close()
