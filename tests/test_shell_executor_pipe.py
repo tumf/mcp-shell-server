@@ -34,6 +34,7 @@ async def test_basic_pipe_command(executor, temp_test_dir, monkeypatch):
 async def test_invalid_pipe_command(executor, temp_test_dir, monkeypatch):
     """Test pipe command with non-allowed command"""
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+    monkeypatch.setenv("ALLOWED_COMMANDS", "echo")
     result = await executor.execute(
         ["echo", "hello", "|", "grep", "hello"], temp_test_dir
     )

@@ -12,10 +12,25 @@ class ShellExecutor:
 
     def __init__(self):
         """
-        Initialize the executor. The allowed commands are read from ALLOW_COMMANDS
-        environment variable during command validation, not at initialization.
+        Initialize the executor.
         """
         pass
+
+    def _get_allowed_commands(self) -> set[str]:
+        """Get the set of allowed commands from environment variables"""
+        allow_commands = os.environ.get("ALLOW_COMMANDS", "")
+        allowed_commands = os.environ.get("ALLOWED_COMMANDS", "")
+        commands = allow_commands + "," + allowed_commands
+        return {cmd.strip() for cmd in commands.split(",") if cmd.strip()}
+
+    def get_allowed_commands(self) -> list[str]:
+        """Get the list of allowed commands from environment variables"""
+        return list(self._get_allowed_commands())
+
+    def is_command_allowed(self, command: str) -> bool:
+        """Check if a command is in the allowed list"""
+        cmd = command.strip()
+        return cmd in self._get_allowed_commands()
 
     def _validate_redirection_syntax(self, command: List[str]) -> None:
         """
@@ -155,23 +170,11 @@ class ShellExecutor:
         """
         for key in ["stdout", "stderr"]:
             handle = handles.get(key)
-            if isinstance(handle, IO) and handle != asyncio.subprocess.PIPE:
+            if handle and hasattr(handle, "close") and not isinstance(handle, int):
                 try:
                     handle.close()
-                except IOError:
+                except (IOError, ValueError):
                     pass
-
-    def _get_allowed_commands(self) -> set:
-        """
-        Get the set of allowed commands from environment variables.
-        Checks both ALLOW_COMMANDS and ALLOWED_COMMANDS.
-        """
-        allow_commands = os.environ.get("ALLOW_COMMANDS", "")
-        allowed_commands = os.environ.get("ALLOWED_COMMANDS", "")
-
-        # Combine and deduplicate commands from both environment variables
-        commands = allow_commands + "," + allowed_commands
-        return {cmd.strip() for cmd in commands.split(",") if cmd.strip()}
 
     def _clean_command(self, command: List[str]) -> List[str]:
         """
@@ -253,24 +256,25 @@ class ShellExecutor:
         if not os.access(directory, os.R_OK | os.X_OK):
             raise ValueError(f"Directory is not accessible: {directory}")
 
-    def get_allowed_commands(self) -> list[str]:
-        """Get the allowed commands"""
-        return list(self._get_allowed_commands())
-
     def _validate_no_shell_operators(self, cmd: str) -> None:
         """Validate that the command does not contain shell operators"""
         if cmd in [";" "&&", "||", "|"]:
             raise ValueError(f"Unexpected shell operator: {cmd}")
 
-    def _validate_pipeline(self, commands: List[str]) -> None:
-        """Validate pipeline command and ensure all parts are allowed"""
+    def _validate_pipeline(self, commands: List[str]) -> Dict[str, str]:
+        """Validate pipeline command and ensure all parts are allowed
+
+        Returns:
+            Dict[str, str]: Error message if validation fails, empty dict if success
+        """
         current_cmd: List[str] = []
 
         for token in commands:
             if token == "|":
                 if not current_cmd:
                     raise ValueError("Empty command before pipe operator")
-                self._validate_command(current_cmd)
+                if not self.is_command_allowed(current_cmd[0]):
+                    raise ValueError(f"Command not allowed: {current_cmd[0]}")
                 current_cmd = []
             elif token in [";", "&&", "||"]:
                 raise ValueError(f"Unexpected shell operator in pipeline: {token}")
@@ -278,7 +282,10 @@ class ShellExecutor:
                 current_cmd.append(token)
 
         if current_cmd:
-            self._validate_command(current_cmd)
+            if not self.is_command_allowed(current_cmd[0]):
+                raise ValueError(f"Command not allowed: {current_cmd[0]}")
+
+        return {}
 
     def _split_pipe_commands(self, command: List[str]) -> List[List[str]]:
         """
@@ -379,6 +386,7 @@ class ShellExecutor:
         timeout: Optional[int] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
+        process = None  # Initialize process variable
 
         try:
             # Validate directory if specified
@@ -393,33 +401,55 @@ class ShellExecutor:
                     "execution_time": time.time() - start_time,
                 }
 
-            # Preprocess command to handle pipe operators
+            # Process command
             preprocessed_command = self._preprocess_command(command)
             cleaned_command = self._clean_command(preprocessed_command)
             if not cleaned_command:
-                raise ValueError("Empty command")
+                return {
+                    "error": "Empty command",
+                    "status": 1,
+                    "stdout": "",
+                    "stderr": "Empty command",
+                    "execution_time": time.time() - start_time,
+                }
 
             # First check for pipe operators and handle pipeline
             if "|" in cleaned_command:
-                commands: List[List[str]] = []
-                current_cmd: List[str] = []
-                for token in cleaned_command:
-                    if token == "|":
-                        if current_cmd:
-                            commands.append(current_cmd)
-                            current_cmd = []
+                try:
+                    # Validate pipeline first
+                    error = self._validate_pipeline(cleaned_command)
+                    if error:
+                        return {
+                            **error,
+                            "status": 1,
+                            "stdout": "",
+                            "execution_time": time.time() - start_time,
+                        }
+
+                    # Split commands
+                    commands: List[List[str]] = []
+                    current_cmd: List[str] = []
+                    for token in cleaned_command:
+                        if token == "|":
+                            if current_cmd:
+                                commands.append(current_cmd)
+                                current_cmd = []
+                            else:
+                                raise ValueError("Empty command before pipe operator")
                         else:
-                            raise ValueError("Empty command before pipe operator")
-                    else:
-                        current_cmd.append(token)
-                if current_cmd:
-                    commands.append(current_cmd)
+                            current_cmd.append(token)
+                    if current_cmd:
+                        commands.append(current_cmd)
 
-                # Validate each command in pipeline
-                for cmd in commands:
-                    self._validate_command(cmd)
-
-                return await self._execute_pipeline(commands, directory, timeout)
+                    return await self._execute_pipeline(commands, directory, timeout)
+                except ValueError as e:
+                    return {
+                        "error": str(e),
+                        "status": 1,
+                        "stdout": "",
+                        "stderr": str(e),
+                        "execution_time": time.time() - start_time,
+                    }
 
             # Then check for other shell operators
             for token in cleaned_command:
@@ -561,6 +591,11 @@ class ShellExecutor:
                 "stderr": str(e),
                 "execution_time": time.time() - start_time,
             }
+        finally:
+            # Ensure process is terminated
+            if process and process.returncode is None:
+                process.kill()
+                await process.wait()
 
     async def _execute_pipeline(
         self,
@@ -663,5 +698,10 @@ class ShellExecutor:
             }
 
         finally:
+            # Ensure all processes are terminated
+            for process in processes:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
             if isinstance(last_stdout, IO):
                 last_stdout.close()

@@ -18,6 +18,20 @@ def temp_test_dir():
 @pytest.mark.asyncio
 async def test_list_tools():
     """Test listing of available tools"""
+
+
+@pytest.mark.asyncio
+async def test_tool_execution_timeout():
+    """Test tool execution with timeout"""
+    with pytest.raises(RuntimeError, match="Command execution timed out"):
+        await call_tool(
+            "shell_execute",
+            {
+                "command": ["sleep", "2"],
+                "directory": "/tmp",
+                "timeout": 1,
+            },
+        )
     tools = await list_tools()
     assert len(tools) == 1
     tool = tools[0]
@@ -183,7 +197,7 @@ async def test_call_tool_with_timeout(monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
     with pytest.raises(RuntimeError) as excinfo:
         await call_tool("shell_execute", {"command": ["sleep", "2"], "timeout": 1})
-    assert "Command timed out after 1 seconds" in str(excinfo.value)
+    assert "Command execution timed out" in str(excinfo.value)
 
 
 @pytest.mark.asyncio
