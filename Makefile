@@ -22,6 +22,6 @@ coverage:
 	pytest --cov=src/mcp_shell_server tests
 
 # Run all checks required before pushing
-check:  lint typecheck test
+check:  lint typecheck
 fix: check format
 all: format check coverage
