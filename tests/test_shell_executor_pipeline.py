@@ -32,3 +32,22 @@ async def test_pipeline_split():
     commands = executor._split_pipe_commands(["echo", "hello", "|"])
     assert len(commands) == 1
     assert commands[0] == ["echo", "hello"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_execution_success():
+    """Test successful pipeline execution with proper return value"""
+    executor = ShellExecutor()
+    import os
+
+    os.environ["ALLOWED_COMMANDS"] = "echo,grep"
+
+    result = await executor.execute(
+        ["echo", "hello world", "|", "grep", "world"], directory="/tmp", timeout=5
+    )
+
+    assert result["error"] is None
+    assert result["status"] == 0
+    assert "world" in result["stdout"]
+    assert "execution_time" in result
+    assert result["directory"] == "/tmp"
