@@ -122,3 +122,11 @@ async def test_invalid_redirection_paths():
     # Test missing path for input redirection
     with pytest.raises(ValueError, match="Missing path for input redirection"):
         executor._parse_command(["cat", "<"])
+
+    # Test missing path for output redirection
+    with pytest.raises(ValueError, match="Missing path for output redirection"):
+        executor._parse_command(["echo", "test", ">"])
+
+    # Test invalid redirection target: operator found for output
+    with pytest.raises(ValueError, match="Invalid redirection target: operator found"):
+        executor._parse_command(["echo", "test", ">", ">"])

@@ -1,5 +1,6 @@
 import os
 
+
 # Configure pytest-asyncio
 def pytest_configure(config):
     """Configure pytest-asyncio defaults"""
