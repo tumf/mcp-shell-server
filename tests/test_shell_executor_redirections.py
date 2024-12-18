@@ -104,3 +104,21 @@ async def test_redirection_setup_errors(temp_test_dir):
             await executor._setup_redirects(redirects, temp_test_dir)
     finally:
         os.chmod(temp_test_dir, 0o755)  # Reset permissions
+
+
+@pytest.mark.asyncio
+async def test_invalid_redirection_paths():
+    """Test invalid redirection path scenarios"""
+    executor = ShellExecutor()
+
+    # Test missing path for output redirection
+    with pytest.raises(ValueError, match="Missing path for output redirection"):
+        executor._parse_command(["echo", "test", ">"])
+
+    # Test invalid redirection target (operator found)
+    with pytest.raises(ValueError, match="Invalid redirection target: operator found"):
+        executor._parse_command(["echo", "test", ">", ">"])
+
+    # Test missing path for input redirection
+    with pytest.raises(ValueError, match="Missing path for input redirection"):
+        executor._parse_command(["cat", "<"])
