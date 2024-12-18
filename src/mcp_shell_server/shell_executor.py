@@ -501,12 +501,24 @@ class ShellExecutor:
             try:
                 # Send input if provided
                 stdin_bytes = stdin.encode() if stdin else None
+
+                async def communicate_with_timeout():
+                    try:
+                        return await process.communicate(input=stdin_bytes)
+                    except Exception as e:
+                        try:
+                            process.kill()
+                            await process.wait()
+                        except Exception:
+                            pass
+                        raise e
+
                 if timeout:
                     stdout, stderr = await asyncio.wait_for(
-                        process.communicate(input=stdin_bytes), timeout=timeout
+                        communicate_with_timeout(), timeout=timeout
                     )
                 else:
-                    stdout, stderr = await process.communicate(input=stdin_bytes)
+                    stdout, stderr = await communicate_with_timeout()
 
                 # Close file handle if using file redirection
                 if isinstance(stdout_handle, IO):
