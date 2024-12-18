@@ -78,21 +78,26 @@ class ExecuteToolHandler:
         if not directory:
             raise ValueError("Directory is required")
 
+        content: list[TextContent] = []
         try:
-            result = await self.executor.execute(command, directory, stdin, timeout)
+            # Handle execution with timeout
+            result = await asyncio.wait_for(
+                self.executor.execute(
+                    command, directory, stdin, None
+                ),  # Pass None for timeout
+                timeout=timeout,
+            )
+
+            if result.get("error"):
+                raise ValueError(result["error"])
+
+            if result.get("stdout"):
+                content.append(TextContent(type="text", text=result["stdout"]))
+            if result.get("stderr"):
+                content.append(TextContent(type="text", text=result["stderr"]))
+
         except asyncio.TimeoutError as e:
             raise ValueError(f"Command timed out after {timeout} seconds") from e
-
-        # Convert executor result to TextContent sequence
-        content: list[TextContent] = []
-
-        if result.get("error"):
-            raise ValueError(result["error"])
-
-        if result.get("stdout"):
-            content.append(TextContent(type="text", text=result["stdout"]))
-        if result.get("stderr"):
-            content.append(TextContent(type="text", text=result["stderr"]))
 
         return content
 

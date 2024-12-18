@@ -44,6 +44,7 @@ asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
     "ignore::RuntimeWarning:selectors:",
     "ignore::pytest.PytestUnhandledCoroutineWarning:",
+    "ignore::pytest.PytestUnraisableExceptionWarning:",
 ]
 
 [tool.ruff]
