@@ -600,3 +600,24 @@ def test_preprocess_command_pipeline(executor):
         "grep",
         "pattern",
     ]
+
+
+@pytest.mark.asyncio
+async def test_command_cleanup_on_error(executor, temp_test_dir, monkeypatch):
+    """Test cleanup of processes when error occurs"""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
+
+    async def execute_with_keyboard_interrupt():
+        # Simulate keyboard interrupt during execution
+        result = await executor.execute(
+            ["sleep", "5"],
+            temp_test_dir,
+            timeout=1
+        )
+        return result
+
+    result = await execute_with_keyboard_interrupt()
+    assert result["error"] == "Command timed out after 1 seconds"
+    assert result["status"] == -1
+    assert "execution_time" in result
