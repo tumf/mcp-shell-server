@@ -378,6 +378,10 @@ class ShellExecutor:
                 preprocessed_command.append(token)
         return preprocessed_command
 
+    def _get_default_shell(self) -> str:
+        """Get the default shell from environment variables"""
+        return os.environ.get("SHELL", "/bin/sh")
+
     async def execute(
         self,
         command: List[str],
@@ -517,14 +521,17 @@ class ShellExecutor:
                 except IOError as e:
                     raise ValueError(f"Failed to open output file: {e}") from e
 
-            # Execute the command
+            # Execute the command with interactive shell
+            shell = self._get_default_shell()
             shell_cmd = self._create_shell_command(cmd)
+            shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
+
             process = await asyncio.create_subprocess_shell(
                 shell_cmd,
                 stdin=asyncio.subprocess.PIPE if stdin else None,
                 stdout=stdout_handle,
                 stderr=asyncio.subprocess.PIPE,
-                env={"PATH": os.environ.get("PATH", "")},
+                env=os.environ,  # Use all environment variables
                 cwd=directory,
             )
 
@@ -642,12 +649,17 @@ class ShellExecutor:
             for i, cmd in enumerate(parsed_commands):
                 shell_cmd = self._create_shell_command(cmd)
 
+                # Get default shell for the first command and set interactive mode
+                if i == 0:
+                    shell = self._get_default_shell()
+                    shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
+
                 process = await asyncio.create_subprocess_shell(
                     shell_cmd,
                     stdin=asyncio.subprocess.PIPE if prev_stdout is not None else None,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    env={"PATH": os.environ.get("PATH", "")},
+                    env=os.environ,  # Use all environment variables
                     cwd=directory,
                 )
 

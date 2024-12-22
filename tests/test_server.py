@@ -322,3 +322,26 @@ async def test_main_server_error_handling(mocker):
         await main()
 
     assert str(exc.value) == "Test error"
+
+
+@pytest.mark.asyncio
+async def test_shell_startup(monkeypatch, temp_test_dir):
+    """Test shell startup and environment"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "ps")
+    result = await call_tool(
+        "shell_execute",
+        {"command": ["ps", "-p", "$$", "-o", "command="], "directory": temp_test_dir},
+    )
+    print("Shell process info:", result)  # Debug output
+
+
+@pytest.mark.asyncio
+async def test_environment_variables(monkeypatch, temp_test_dir):
+    """Test to check environment variables during test execution"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "env")
+    result = await call_tool(
+        "shell_execute",
+        {"command": ["env"], "directory": temp_test_dir},
+    )
+    assert len(result) == 1
+    print(result[0].text)  # 環境変数の内容を確認
