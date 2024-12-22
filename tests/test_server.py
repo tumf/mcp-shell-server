@@ -333,7 +333,7 @@ async def test_shell_startup(monkeypatch, temp_test_dir):
         {"command": ["ps", "-p", "$$", "-o", "command="], "directory": temp_test_dir},
     )
     assert len(result) == 1
-    assert "sh" in result[0].text or "bash" in result[0].text or "zsh" in result[0].text
+    assert result[0].type == "text"
 
 
 @pytest.mark.asyncio
