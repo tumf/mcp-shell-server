@@ -1,5 +1,6 @@
 import asyncio
 import os
+import pwd
 import shlex
 import time
 from typing import IO, Any, Dict, List, Optional, Tuple, Union
@@ -379,8 +380,11 @@ class ShellExecutor:
         return preprocessed_command
 
     def _get_default_shell(self) -> str:
-        """Get the default shell from environment variables"""
-        return os.environ.get("SHELL", "/bin/sh")
+        """Get the login shell of the current user"""
+        try:
+            return pwd.getpwuid(os.getuid()).pw_shell
+        except (ImportError, KeyError):
+            return os.environ.get("SHELL", "/bin/sh")
 
     async def execute(
         self,

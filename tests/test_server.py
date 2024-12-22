@@ -332,7 +332,8 @@ async def test_shell_startup(monkeypatch, temp_test_dir):
         "shell_execute",
         {"command": ["ps", "-p", "$$", "-o", "command="], "directory": temp_test_dir},
     )
-    print("Shell process info:", result)  # Debug output
+    assert len(result) == 1
+    assert "sh" in result[0].text or "bash" in result[0].text or "zsh" in result[0].text
 
 
 @pytest.mark.asyncio
@@ -344,4 +345,3 @@ async def test_environment_variables(monkeypatch, temp_test_dir):
         {"command": ["env"], "directory": temp_test_dir},
     )
     assert len(result) == 1
-    print(result[0].text)  # 環境変数の内容を確認
