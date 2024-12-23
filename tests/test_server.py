@@ -1,3 +1,4 @@
+import asyncio
 import os
 import tempfile
 
@@ -5,6 +6,67 @@ import pytest
 from mcp.types import TextContent, Tool
 
 from mcp_shell_server.server import call_tool, list_tools
+
+
+# Mock process class
+class MockProcess:
+    def __init__(self, stdout=None, stderr=None, returncode=0):
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+        self._input = None
+
+    async def communicate(self, input=None):
+        self._input = input
+        if self._input and not isinstance(self._input, bytes):
+            self._input = self._input.encode("utf-8")
+
+        # For cat command, echo back the input
+        if self.stdout is None and self._input:
+            return self._input, self.stderr
+
+        if isinstance(self.stdout, int):
+            self.stdout = str(self.stdout).encode("utf-8")
+        if self.stdout is None:
+            self.stdout = b""
+        if self.stderr is None:
+            self.stderr = b""
+        return self.stdout, self.stderr
+
+    async def wait(self):
+        return self.returncode
+
+    def kill(self):
+        pass
+
+
+def setup_mock_subprocess(monkeypatch):
+    """Set up mock subprocess to avoid interactive shell warnings"""
+
+    async def mock_create_subprocess_shell(
+        cmd, stdin=None, stdout=None, stderr=None, env=None, cwd=None
+    ):
+        # Return appropriate output based on command
+        if "echo" in cmd:
+            return MockProcess(stdout=b"hello world\n", stderr=b"", returncode=0)
+        elif "pwd" in cmd:
+            return MockProcess(stdout=cwd.encode() + b"\n", stderr=b"", returncode=0)
+        elif "cat" in cmd:
+            return MockProcess(
+                stdout=None, stderr=b"", returncode=0
+            )  # Will echo back stdin
+        elif "ps" in cmd:
+            return MockProcess(stdout=b"bash\n", stderr=b"", returncode=0)
+        elif "env" in cmd:
+            return MockProcess(stdout=b"TEST_ENV=value\n", stderr=b"", returncode=0)
+        elif "sleep" in cmd:
+            return MockProcess(stdout=b"", stderr=b"", returncode=0)
+        else:
+            return MockProcess(stdout=b"", stderr=b"", returncode=0)
+
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_shell", mock_create_subprocess_shell
+    )
 
 
 @pytest.fixture
@@ -62,6 +124,7 @@ async def test_call_tool_valid_command(monkeypatch, temp_test_dir):
 @pytest.mark.asyncio
 async def test_call_tool_with_stdin(monkeypatch, temp_test_dir):
     """Test command execution with stdin"""
+    setup_mock_subprocess(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
     result = await call_tool(
         "shell_execute",
@@ -237,6 +300,22 @@ async def test_disallowed_command(monkeypatch):
 @pytest.mark.asyncio
 async def test_call_tool_with_stderr(monkeypatch):
     """Test command execution with stderr output"""
+
+    async def mock_create_subprocess_shell(
+        cmd, stdin=None, stdout=None, stderr=None, env=None, cwd=None
+    ):
+        # Return mock process with stderr for ls command
+        if "ls" in cmd:
+            return MockProcess(
+                stdout=b"",
+                stderr=b"ls: cannot access '/nonexistent/directory': No such file or directory\n",
+                returncode=2,
+            )
+        return MockProcess(stdout=b"", stderr=b"", returncode=0)
+
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_shell", mock_create_subprocess_shell
+    )
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
     result = await call_tool(
         "shell_execute",
@@ -327,6 +406,7 @@ async def test_main_server_error_handling(mocker):
 @pytest.mark.asyncio
 async def test_shell_startup(monkeypatch, temp_test_dir):
     """Test shell startup and environment"""
+    setup_mock_subprocess(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "ps")
     result = await call_tool(
         "shell_execute",
@@ -339,6 +419,7 @@ async def test_shell_startup(monkeypatch, temp_test_dir):
 @pytest.mark.asyncio
 async def test_environment_variables(monkeypatch, temp_test_dir):
     """Test to check environment variables during test execution"""
+    setup_mock_subprocess(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "env")
     result = await call_tool(
         "shell_execute",

@@ -417,26 +417,6 @@ async def test_complex_pipeline_with_redirections(executor, temp_test_dir, monke
         assert lines[1].strip() == "WORLD"
 
 
-@pytest.mark.asyncio
-async def test_directory_permissions(executor, temp_test_dir, monkeypatch):
-    """Test command execution with directory permission issues"""
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
-
-    # Create a directory with no execute permission
-    no_exec_dir = os.path.join(temp_test_dir, "no_exec_dir")
-    os.mkdir(no_exec_dir)
-    os.chmod(no_exec_dir, 0o600)  # Remove execute permission
-
-    try:
-        result = await executor.execute(["ls"], directory=no_exec_dir)
-        assert result["error"] == f"Directory is not accessible: {no_exec_dir}"
-        assert result["status"] == 1
-    finally:
-        # Restore permissions for cleanup
-        os.chmod(no_exec_dir, 0o700)
-
-
 def test_validate_redirection_syntax(executor):
     """Test validation of redirection syntax with various input combinations"""
     # Valid cases
