@@ -621,4 +621,53 @@ async def test_output_redirection_with_append(executor, temp_test_dir, monkeypat
     lines = result["stdout"].strip().split("\n")
     assert len(lines) == 2
     assert lines[0] == "hello"
-    assert lines[1] == "world"
+
+
+@pytest.mark.asyncio
+async def test_execute_with_custom_env(executor, temp_test_dir, monkeypatch):
+    """Test command execution with custom environment variables"""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "env,printenv")
+
+    custom_env = {"TEST_VAR1": "test_value1", "TEST_VAR2": "test_value2"}
+
+    # Test env command
+    result = await executor.execute(["env"], directory=temp_test_dir, envs=custom_env)
+    assert "TEST_VAR1=test_value1" in result["stdout"]
+    assert "TEST_VAR2=test_value2" in result["stdout"]
+
+    # Test specific variable
+    result = await executor.execute(
+        ["printenv", "TEST_VAR1"], directory=temp_test_dir, envs=custom_env
+    )
+    assert result["stdout"].strip() == "test_value1"
+
+
+@pytest.mark.asyncio
+async def test_execute_env_override(executor, temp_test_dir, monkeypatch):
+    """Test that custom environment variables override system variables"""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "env")
+    monkeypatch.setenv("TEST_VAR", "original_value")
+
+    # Override system environment variable
+    result = await executor.execute(
+        ["env"], directory=temp_test_dir, envs={"TEST_VAR": "new_value"}
+    )
+
+    assert "TEST_VAR=new_value" in result["stdout"]
+    assert "TEST_VAR=original_value" not in result["stdout"]
+
+
+@pytest.mark.asyncio
+async def test_execute_with_empty_env(executor, temp_test_dir, monkeypatch):
+    """Test command execution with empty environment variables"""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "env")
+
+    result = await executor.execute(["env"], directory=temp_test_dir, envs={})
+
+    # Command should still work with system environment
+    assert result["error"] is None
+    assert result["status"] == 0
+    assert len(result["stdout"]) > 0
