@@ -1,5 +1,6 @@
 import asyncio
 import os
+import pwd
 import shlex
 import time
 from typing import IO, Any, Dict, List, Optional, Tuple, Union
@@ -14,7 +15,7 @@ class ShellExecutor:
         """
         Initialize the executor.
         """
-        pass
+        pass  # pragma: no cover
 
     def _get_allowed_commands(self) -> set[str]:
         """Get the set of allowed commands from environment variables"""
@@ -378,6 +379,13 @@ class ShellExecutor:
                 preprocessed_command.append(token)
         return preprocessed_command
 
+    def _get_default_shell(self) -> str:
+        """Get the login shell of the current user"""
+        try:
+            return pwd.getpwuid(os.getuid()).pw_shell
+        except (ImportError, KeyError):
+            return os.environ.get("SHELL", "/bin/sh")
+
     async def execute(
         self,
         command: List[str],
@@ -517,14 +525,17 @@ class ShellExecutor:
                 except IOError as e:
                     raise ValueError(f"Failed to open output file: {e}") from e
 
-            # Execute the command
+            # Execute the command with interactive shell
+            shell = self._get_default_shell()
             shell_cmd = self._create_shell_command(cmd)
+            shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
+
             process = await asyncio.create_subprocess_shell(
                 shell_cmd,
                 stdin=asyncio.subprocess.PIPE if stdin else None,
                 stdout=stdout_handle,
                 stderr=asyncio.subprocess.PIPE,
-                env={"PATH": os.environ.get("PATH", "")},
+                env=os.environ,  # Use all environment variables
                 cwd=directory,
             )
 
@@ -642,12 +653,17 @@ class ShellExecutor:
             for i, cmd in enumerate(parsed_commands):
                 shell_cmd = self._create_shell_command(cmd)
 
+                # Get default shell for the first command and set interactive mode
+                if i == 0:
+                    shell = self._get_default_shell()
+                    shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
+
                 process = await asyncio.create_subprocess_shell(
                     shell_cmd,
                     stdin=asyncio.subprocess.PIPE if prev_stdout is not None else None,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    env={"PATH": os.environ.get("PATH", "")},
+                    env=os.environ,  # Use all environment variables
                     cwd=directory,
                 )
 
