@@ -610,11 +610,7 @@ async def test_command_cleanup_on_error(executor, temp_test_dir, monkeypatch):
 
     async def execute_with_keyboard_interrupt():
         # Simulate keyboard interrupt during execution
-        result = await executor.execute(
-            ["sleep", "5"],
-            temp_test_dir,
-            timeout=1
-        )
+        result = await executor.execute(["sleep", "5"], temp_test_dir, timeout=1)
         return result
 
     result = await execute_with_keyboard_interrupt()
