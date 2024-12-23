@@ -15,7 +15,7 @@ class ShellExecutor:
         """
         Initialize the executor.
         """
-        pass
+        pass  # pragma: no cover
 
     def _get_allowed_commands(self) -> set[str]:
         """Get the set of allowed commands from environment variables"""

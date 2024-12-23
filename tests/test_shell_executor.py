@@ -617,3 +617,28 @@ async def test_command_cleanup_on_error(executor, temp_test_dir, monkeypatch):
     assert result["error"] == "Command timed out after 1 seconds"
     assert result["status"] == -1
     assert "execution_time" in result
+
+
+@pytest.mark.asyncio
+async def test_output_redirection_with_append(executor, temp_test_dir, monkeypatch):
+    """Test output redirection with append mode"""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,cat")
+    output_file = os.path.join(temp_test_dir, "test.txt")
+
+    # Write initial content
+    await executor.execute(["echo", "hello", ">", output_file], directory=temp_test_dir)
+
+    # Append content
+    result = await executor.execute(
+        ["echo", "world", ">>", output_file], directory=temp_test_dir
+    )
+    assert result["error"] is None
+    assert result["status"] == 0
+
+    # Verify contents
+    result = await executor.execute(["cat", output_file], directory=temp_test_dir)
+    lines = result["stdout"].strip().split("\n")
+    assert len(lines) == 2
+    assert lines[0] == "hello"
+    assert lines[1] == "world"

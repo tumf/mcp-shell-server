@@ -1,4 +1,5 @@
 """Test pipeline execution and cleanup scenarios."""
+
 import os
 import tempfile
 
@@ -61,7 +62,9 @@ async def test_pipeline_execution_success(executor, temp_test_dir, monkeypatch):
     monkeypatch.setenv("ALLOWED_COMMANDS", "echo,grep")
 
     result = await executor.execute(
-        ["echo", "hello world", "|", "grep", "world"], directory=temp_test_dir, timeout=5
+        ["echo", "hello world", "|", "grep", "world"],
+        directory=temp_test_dir,
+        timeout=5,
     )
 
     assert result["error"] is None
@@ -84,16 +87,12 @@ async def test_pipeline_cleanup_and_timeouts(executor, temp_test_dir, monkeypatc
     result = await executor.execute(
         ["cat", test_file, "|", "tr", "[:lower:]", "[:upper:]", "|", "head", "-n", "1"],
         temp_test_dir,
-        timeout=2
+        timeout=2,
     )
     assert result["status"] == 0
     assert result["stdout"].strip() == "TEST"
 
     # Test timeout handling in pipeline
-    result = await executor.execute(
-        ["sleep", "5"],
-        temp_test_dir,
-        timeout=1
-    )
+    result = await executor.execute(["sleep", "5"], temp_test_dir, timeout=1)
     assert result["status"] == -1
     assert "timed out" in result["error"].lower()  # タイムアウトエラーの確認
