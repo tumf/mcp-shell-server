@@ -392,6 +392,7 @@ class ShellExecutor:
         directory: str,
         stdin: Optional[str] = None,
         timeout: Optional[int] = None,
+        envs: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
         process = None  # Initialize process variable
@@ -449,7 +450,9 @@ class ShellExecutor:
                     if current_cmd:
                         commands.append(current_cmd)
 
-                    return await self._execute_pipeline(commands, directory, timeout)
+                    return await self._execute_pipeline(
+                        commands, directory, timeout, envs
+                    )
                 except ValueError as e:
                     return {
                         "error": str(e),
@@ -535,7 +538,7 @@ class ShellExecutor:
                 stdin=asyncio.subprocess.PIPE if stdin else None,
                 stdout=stdout_handle,
                 stderr=asyncio.subprocess.PIPE,
-                env=os.environ,  # Use all environment variables
+                env={**os.environ, **(envs or {})},  # Merge environment variables
                 cwd=directory,
             )
 
@@ -613,6 +616,7 @@ class ShellExecutor:
         commands: List[List[str]],
         directory: Optional[str] = None,
         timeout: Optional[int] = None,
+        envs: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
         processes: List[asyncio.subprocess.Process] = []
@@ -663,7 +667,7 @@ class ShellExecutor:
                     stdin=asyncio.subprocess.PIPE if prev_stdout is not None else None,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    env=os.environ,  # Use all environment variables
+                    env={**os.environ, **(envs or {})},  # Merge environment variables
                     cwd=directory,
                 )
 
