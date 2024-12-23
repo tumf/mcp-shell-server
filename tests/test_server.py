@@ -300,6 +300,22 @@ async def test_disallowed_command(monkeypatch):
 @pytest.mark.asyncio
 async def test_call_tool_with_stderr(monkeypatch):
     """Test command execution with stderr output"""
+
+    async def mock_create_subprocess_shell(
+        cmd, stdin=None, stdout=None, stderr=None, env=None, cwd=None
+    ):
+        # Return mock process with stderr for ls command
+        if "ls" in cmd:
+            return MockProcess(
+                stdout=b"",
+                stderr=b"ls: cannot access '/nonexistent/directory': No such file or directory\n",
+                returncode=2,
+            )
+        return MockProcess(stdout=b"", stderr=b"", returncode=0)
+
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_shell", mock_create_subprocess_shell
+    )
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
     result = await call_tool(
         "shell_execute",
