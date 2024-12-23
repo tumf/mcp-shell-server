@@ -98,11 +98,9 @@ class ExecuteToolHandler:
             if result.get("stdout"):
                 content.append(TextContent(type="text", text=result["stdout"]))
 
-            # Add stderr if present and not a process group message
+            # Add stderr if present (filter out specific messages)
             stderr = result.get("stderr")
-            if stderr and not stderr.startswith(
-                "bash: cannot set terminal process group"
-            ):
+            if stderr and "cannot set terminal process group" not in stderr:
                 content.append(TextContent(type="text", text=stderr))
 
         except asyncio.TimeoutError as e:
