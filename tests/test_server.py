@@ -1,10 +1,69 @@
 import os
 import tempfile
+import asyncio
 
 import pytest
 from mcp.types import TextContent, Tool
 
 from mcp_shell_server.server import call_tool, list_tools
+
+# Mock process class
+class MockProcess:
+    def __init__(self, stdout=None, stderr=None, returncode=0):
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
+    async def communicate(self, input=None):
+        return self.stdout, self.stderr
+
+    async def wait(self):
+        return self.returncode
+
+    def kill(self):
+        pass
+
+@pytest.fixture
+async def mock_subprocess(monkeypatch):
+    """Mock subprocess to avoid interactive shell warnings"""
+    async def mock_create_subprocess_shell(cmd, stdin=None, stdout=None, stderr=None, env=None, cwd=None):
+        # Return appropriate output based on command
+        if "echo" in cmd:
+            return MockProcess(
+                stdout=b"hello world\n",
+                stderr=b"",
+                returncode=0
+            )
+        elif "pwd" in cmd:
+            return MockProcess(
+                stdout=cwd.encode() + b"\n",
+                stderr=b"",
+                returncode=0
+            )
+        elif "cat" in cmd:
+            if stdin:
+                return MockProcess(
+                    stdout=stdin,
+                    stderr=b"",
+                    returncode=0
+                )
+            return MockProcess(
+                stdout=b"test input",
+                stderr=b"",
+                returncode=0
+            )
+        elif "env" in cmd:
+            return MockProcess(
+                stdout=b"TEST_ENV=value\n",
+                stderr=b"",
+                returncode=0
+            )
+        elif "sleep" in cmd:
+            return MockProcess(stdout=b"", stderr=b"", returncode=0)
+        else:
+            return MockProcess(stdout=b"", stderr=b"", returncode=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_shell", mock_create_subprocess_shell)
 
 
 @pytest.fixture
@@ -60,7 +119,7 @@ async def test_call_tool_valid_command(monkeypatch, temp_test_dir):
 
 
 @pytest.mark.asyncio
-async def test_call_tool_with_stdin(monkeypatch, temp_test_dir):
+async def test_call_tool_with_stdin(monkeypatch, temp_test_dir, mock_subprocess):
     """Test command execution with stdin"""
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
     result = await call_tool(
@@ -74,6 +133,7 @@ async def test_call_tool_with_stdin(monkeypatch, temp_test_dir):
 
 
 @pytest.mark.asyncio
+async def test_call_tool_with_directory(temp_test_dir, monkeypatch, mock_subprocess):
 async def test_call_tool_invalid_command(monkeypatch, temp_test_dir):
     """Test execution of an invalid command"""
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
@@ -325,7 +385,7 @@ async def test_main_server_error_handling(mocker):
 
 
 @pytest.mark.asyncio
-async def test_shell_startup(monkeypatch, temp_test_dir):
+async def test_shell_startup(monkeypatch, temp_test_dir, mock_subprocess):
     """Test shell startup and environment"""
     monkeypatch.setenv("ALLOW_COMMANDS", "ps")
     result = await call_tool(
@@ -337,7 +397,7 @@ async def test_shell_startup(monkeypatch, temp_test_dir):
 
 
 @pytest.mark.asyncio
-async def test_environment_variables(monkeypatch, temp_test_dir):
+async def test_environment_variables(monkeypatch, temp_test_dir, mock_subprocess):
     """Test to check environment variables during test execution"""
     monkeypatch.setenv("ALLOW_COMMANDS", "env")
     result = await call_tool(
