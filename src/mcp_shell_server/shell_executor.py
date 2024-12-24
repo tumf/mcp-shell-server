@@ -381,9 +381,22 @@ class ShellExecutor:
                 )
 
                 try:
-                    # Execute the current command
-                    stdout, stderr = await asyncio.wait_for(
-                        process.communicate(input=prev_stdout), timeout=timeout
+                    # Execute the current command using ProcessManager
+                    process = await self.process_manager.create_process(
+                        cmd_str,
+                        directory,
+                        stdout_handle=(
+                            asyncio.subprocess.PIPE
+                            if i < len(parsed_commands) - 1 or not last_stdout
+                            else last_stdout
+                        ),
+                        envs=envs
+                    )
+                    
+                    stdout, stderr = await self.process_manager.execute_with_timeout(
+                        process,
+                        stdin=prev_stdout.decode() if prev_stdout else None,
+                        timeout=timeout
                     )
 
                     # Collect stderr and check return code
@@ -412,10 +425,10 @@ class ShellExecutor:
                     processes.append(process)
 
                 except asyncio.TimeoutError:
-                    process.kill()
+                    await self.process_manager.cleanup_processes([process])
                     raise
                 except Exception:
-                    process.kill()
+                    await self.process_manager.cleanup_processes([process])
                     raise
 
             return {
@@ -437,9 +450,6 @@ class ShellExecutor:
             }
 
         finally:
-            # Ensure all processes are terminated
-            for process in processes:
-                if process.returncode is None:
-                    process.kill()
-                    await process.wait()
+            # Cleanup all processes using ProcessManager
+            await self.process_manager.cleanup_processes(processes)
             await self.io_handler.cleanup_handles({"stdout": last_stdout})
