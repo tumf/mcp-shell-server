@@ -6,6 +6,7 @@ import time
 from typing import IO, Any, Dict, List, Optional, Tuple, Union
 
 from mcp_shell_server.command_validator import CommandValidator
+from mcp_shell_server.directory_manager import DirectoryManager
 
 
 class ShellExecutor:
@@ -15,9 +16,10 @@ class ShellExecutor:
 
     def __init__(self):
         """
-        Initialize the executor with a command validator.
+        Initialize the executor with a command validator and directory manager.
         """
         self.validator = CommandValidator()
+        self.directory_manager = DirectoryManager()
 
     def _validate_redirection_syntax(self, command: List[str]) -> None:
         """
@@ -221,18 +223,7 @@ class ShellExecutor:
         Raises:
             ValueError: If the directory doesn't exist, not absolute or is not accessible
         """
-        # make directory required
-        if directory is None:
-            raise ValueError("Directory is required")
-        # verify directory is absolute path
-        if not os.path.isabs(directory):
-            raise ValueError(f"Directory must be an absolute path: {directory}")
-        if not os.path.exists(directory):
-            raise ValueError(f"Directory does not exist: {directory}")
-        if not os.path.isdir(directory):
-            raise ValueError(f"Not a directory: {directory}")
-        if not os.access(directory, os.R_OK | os.X_OK):
-            raise ValueError(f"Directory is not accessible: {directory}")
+        self.directory_manager.validate_directory(directory)
 
     def _validate_no_shell_operators(self, cmd: str) -> None:
         """Validate that the command does not contain shell operators"""
@@ -465,10 +456,8 @@ class ShellExecutor:
 
             # Update stdin from redirects if present
             if redirects["stdin"]:
-                stdin_path = (
-                    os.path.join(directory, str(redirects["stdin"]))
-                    if directory and redirects["stdin"]
-                    else str(redirects["stdin"])
+                stdin_path = self.directory_manager.get_absolute_path(
+                    str(redirects["stdin"]), directory
                 )
                 try:
                     with open(stdin_path, "r") as f:
@@ -479,10 +468,8 @@ class ShellExecutor:
             # Setup output redirection
             stdout_handle: Union[int, IO[Any]] = asyncio.subprocess.PIPE
             if redirects["stdout"]:
-                stdout_path = (
-                    os.path.join(directory, str(redirects["stdout"]))
-                    if directory and redirects["stdout"]
-                    else str(redirects["stdout"])
+                stdout_path = self.directory_manager.get_absolute_path(
+                    str(redirects["stdout"]), directory
                 )
                 mode = "a" if redirects["stdout_append"] else "w"
                 try:
@@ -593,19 +580,18 @@ class ShellExecutor:
                 parsed_commands.append(parsed_cmd)
 
                 if commands.index(cmd) == 0 and redirects["stdin"]:
-                    stdin_path = (
-                        os.path.join(directory, str(redirects["stdin"]))
-                        if directory
-                        else str(redirects["stdin"])
+                    stdin_path = self.directory_manager.get_absolute_path(
+                        str(redirects["stdin"]), directory
                     )
                     with open(stdin_path, "r") as f:
                         first_stdin = f.read().encode()
 
                 if commands.index(cmd) == len(commands) - 1 and redirects["stdout"]:
-                    stdout_path = (
-                        os.path.join(directory, str(redirects["stdout"]))
-                        if directory
-                        else str(redirects["stdout"])
+                    stdout_path = self.directory_manager.get_absolute_path(
+                        str(redirects["stdout"]), directory
+                    )
+                    last_stdout = open(
+                        stdout_path, "a" if redirects["stdout_append"] else "w"
                     )
                     last_stdout = open(
                         stdout_path, "a" if redirects["stdout_append"] else "w"
