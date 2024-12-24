@@ -361,7 +361,7 @@ async def test_redirection_error_cases(executor, temp_test_dir, monkeypatch):
     result = await executor.execute(
         ["cat", "<", "nonexistent.txt"], directory=temp_test_dir
     )
-    assert "No such file or directory" in result["error"]
+    assert result["error"] == "Failed to open input file"
 
     # Invalid redirection operator
     result = await executor.execute(
@@ -420,16 +420,20 @@ async def test_complex_pipeline_with_redirections(executor, temp_test_dir, monke
 def test_validate_redirection_syntax(executor):
     """Test validation of redirection syntax with various input combinations"""
     # Valid cases
-    executor._validate_redirection_syntax(["echo", "hello", ">", "file.txt"])
-    executor._validate_redirection_syntax(["cat", "<", "input.txt", ">", "output.txt"])
+    executor.io_handler.validate_redirection_syntax(["echo", "hello", ">", "file.txt"])
+    executor.io_handler.validate_redirection_syntax(
+        ["cat", "<", "input.txt", ">", "output.txt"]
+    )
 
     # Test consecutive operators
     with pytest.raises(ValueError) as exc:
-        executor._validate_redirection_syntax(["echo", "text", ">", ">", "file.txt"])
+        executor.io_handler.validate_redirection_syntax(
+            ["echo", "text", ">", ">", "file.txt"]
+        )
     assert str(exc.value) == "Invalid redirection syntax: consecutive operators"
 
     with pytest.raises(ValueError) as exc:
-        executor._validate_redirection_syntax(["cat", "<", "<", "input.txt"])
+        executor.io_handler.validate_redirection_syntax(["cat", "<", "<", "input.txt"])
     assert str(exc.value) == "Invalid redirection syntax: consecutive operators"
 
 
@@ -545,10 +549,17 @@ async def test_io_handle_close(executor, temp_test_dir, monkeypatch, mocker):
 
     # Patch the open function to return our mock
     mocker.patch("builtins.open", return_value=mock_file)
+
+    # Mock logging.warning to capture the warning
+    mock_warning = mocker.patch("logging.warning")
+
+    # Execute should not raise an error
     await executor.execute(["echo", "hello", ">", test_file], directory=temp_test_dir)
 
     # Verify our mock's close method was called
     assert mock_file.close.called
+    # Verify warning was logged
+    mock_warning.assert_called_once_with("Error closing stdout: Failed to close file")
 
 
 def test_preprocess_command_pipeline(executor):

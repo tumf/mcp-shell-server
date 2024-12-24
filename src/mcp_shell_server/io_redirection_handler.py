@@ -113,8 +113,8 @@ class IORedirectionHandler:
                 handles["stdin"] = asyncio.subprocess.PIPE
                 handles["stdin_data"] = file.read()
                 file.close()
-            except IOError as e:
-                raise ValueError(f"Failed to open input file: {e}") from e
+            except (FileNotFoundError, IOError) as e:
+                raise ValueError("Failed to open input file") from e
 
         # Handle output redirection
         if redirects["stdout"]:
