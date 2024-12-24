@@ -5,6 +5,8 @@ import shlex
 import time
 from typing import IO, Any, Dict, List, Optional, Tuple, Union
 
+from mcp_shell_server.command_validator import CommandValidator
+
 
 class ShellExecutor:
     """
@@ -13,25 +15,9 @@ class ShellExecutor:
 
     def __init__(self):
         """
-        Initialize the executor.
+        Initialize the executor with a command validator.
         """
-        pass  # pragma: no cover
-
-    def _get_allowed_commands(self) -> set[str]:
-        """Get the set of allowed commands from environment variables"""
-        allow_commands = os.environ.get("ALLOW_COMMANDS", "")
-        allowed_commands = os.environ.get("ALLOWED_COMMANDS", "")
-        commands = allow_commands + "," + allowed_commands
-        return {cmd.strip() for cmd in commands.split(",") if cmd.strip()}
-
-    def get_allowed_commands(self) -> list[str]:
-        """Get the list of allowed commands from environment variables"""
-        return list(self._get_allowed_commands())
-
-    def is_command_allowed(self, command: str) -> bool:
-        """Check if a command is in the allowed list"""
-        cmd = command.strip()
-        return cmd in self._get_allowed_commands()
+        self.validator = CommandValidator()
 
     def _validate_redirection_syntax(self, command: List[str]) -> None:
         """
@@ -223,16 +209,7 @@ class ShellExecutor:
         if not command:
             raise ValueError("Empty command")
 
-        allowed_commands = self._get_allowed_commands()
-        if not allowed_commands:
-            raise ValueError(
-                "No commands are allowed. Please set ALLOW_COMMANDS environment variable."
-            )
-
-        # Clean and check the first command
-        cleaned_cmd = command[0].strip()
-        if cleaned_cmd not in allowed_commands:
-            raise ValueError(f"Command not allowed: {cleaned_cmd}")
+        self.validator.validate_command(command)
 
     def _validate_directory(self, directory: Optional[str]) -> None:
         """
@@ -259,8 +236,7 @@ class ShellExecutor:
 
     def _validate_no_shell_operators(self, cmd: str) -> None:
         """Validate that the command does not contain shell operators"""
-        if cmd in [";" "&&", "||", "|"]:
-            raise ValueError(f"Unexpected shell operator: {cmd}")
+        self.validator.validate_no_shell_operators(cmd)
 
     def _validate_pipeline(self, commands: List[str]) -> Dict[str, str]:
         """Validate pipeline command and ensure all parts are allowed
@@ -268,25 +244,7 @@ class ShellExecutor:
         Returns:
             Dict[str, str]: Error message if validation fails, empty dict if success
         """
-        current_cmd: List[str] = []
-
-        for token in commands:
-            if token == "|":
-                if not current_cmd:
-                    raise ValueError("Empty command before pipe operator")
-                if not self.is_command_allowed(current_cmd[0]):
-                    raise ValueError(f"Command not allowed: {current_cmd[0]}")
-                current_cmd = []
-            elif token in [";", "&&", "||"]:
-                raise ValueError(f"Unexpected shell operator in pipeline: {token}")
-            else:
-                current_cmd.append(token)
-
-        if current_cmd:
-            if not self.is_command_allowed(current_cmd[0]):
-                raise ValueError(f"Command not allowed: {current_cmd[0]}")
-
-        return {}
+        return self.validator.validate_pipeline(commands)
 
     def _split_pipe_commands(self, command: List[str]) -> List[List[str]]:
         """
@@ -425,13 +383,15 @@ class ShellExecutor:
             # First check for pipe operators and handle pipeline
             if "|" in cleaned_command:
                 try:
-                    # Validate pipeline first
-                    error = self._validate_pipeline(cleaned_command)
-                    if error:
+                    # Validate pipeline first using the validator
+                    try:
+                        self.validator.validate_pipeline(cleaned_command)
+                    except ValueError as e:
                         return {
-                            **error,
+                            "error": str(e),
                             "status": 1,
                             "stdout": "",
+                            "stderr": str(e),
                             "execution_time": time.time() - start_time,
                         }
 
@@ -464,18 +424,20 @@ class ShellExecutor:
 
             # Then check for other shell operators
             for token in cleaned_command:
-                if token in [";", "&&", "||"]:
+                try:
+                    self.validator.validate_no_shell_operators(token)
+                except ValueError as e:
                     return {
-                        "error": f"Unexpected shell operator: {token}",
+                        "error": str(e),
                         "status": 1,
                         "stdout": "",
-                        "stderr": f"Unexpected shell operator: {token}",
+                        "stderr": str(e),
                         "execution_time": time.time() - start_time,
                     }
 
             # Single command execution
             cmd, redirects = self._parse_command(cleaned_command)
-            self._validate_command(cmd)
+            self.validator.validate_command(cmd)
 
             # Directory validation
             if directory:

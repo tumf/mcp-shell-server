@@ -233,7 +233,7 @@ async def test_allow_commands_precedence(executor, temp_test_dir, monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls")
     monkeypatch.setenv("ALLOWED_COMMANDS", "echo,cat")
 
-    allowed = executor.get_allowed_commands()
+    allowed = executor.validator.get_allowed_commands()
     assert set(allowed) == {"echo", "ls", "cat"}
 
 
@@ -494,11 +494,11 @@ def test_validate_pipeline(executor, monkeypatch):
     monkeypatch.setenv("ALLOWED_COMMANDS", "echo,grep,cat")
 
     # Test valid pipeline
-    executor._validate_pipeline(["echo", "hello", "|", "grep", "h"])
+    executor.validator.validate_pipeline(["echo", "hello", "|", "grep", "h"])
 
     # Test empty command before pipe
     with pytest.raises(ValueError) as exc:
-        executor._validate_pipeline(["|", "grep", "test"])
+        executor.validator.validate_pipeline(["|", "grep", "test"])
     assert str(exc.value) == "Empty command before pipe operator"
 
     # Test disallowed commands in pipeline
