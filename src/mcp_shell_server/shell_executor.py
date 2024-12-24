@@ -7,6 +7,7 @@ from typing import IO, Any, Dict, List, Optional, Tuple, Union
 
 from mcp_shell_server.command_validator import CommandValidator
 from mcp_shell_server.directory_manager import DirectoryManager
+from mcp_shell_server.io_redirection_handler import IORedirectionHandler
 
 
 class ShellExecutor:
@@ -16,154 +17,11 @@ class ShellExecutor:
 
     def __init__(self):
         """
-        Initialize the executor with a command validator and directory manager.
+        Initialize the executor with a command validator, directory manager and IO handler.
         """
         self.validator = CommandValidator()
         self.directory_manager = DirectoryManager()
-
-    def _validate_redirection_syntax(self, command: List[str]) -> None:
-        """
-        Validate the syntax of redirection operators in the command.
-
-        Args:
-            command (List[str]): Command and its arguments including redirections
-
-        Raises:
-            ValueError: If the redirection syntax is invalid
-        """
-        prev_token = None
-        for token in command:
-            if token in [">", ">>", "<"]:
-                if prev_token and prev_token in [">", ">>", "<"]:
-                    raise ValueError(
-                        "Invalid redirection syntax: consecutive operators"
-                    )
-            prev_token = token
-
-    def _process_redirections(
-        self, command: List[str]
-    ) -> Tuple[List[str], Dict[str, Union[None, str, bool]]]:
-        """
-        Process input/output redirections in the command.
-
-        Args:
-            command (List[str]): Command and its arguments including redirections
-
-        Returns:
-            Tuple[List[str], Dict[str, Any]]: Processed command without redirections and
-                                             redirection configuration
-
-        Raises:
-            ValueError: If the redirection syntax is invalid
-        """
-        self._validate_redirection_syntax(command)
-
-        cmd = []
-        redirects: Dict[str, Union[None, str, bool]] = {
-            "stdin": None,
-            "stdout": None,
-            "stdout_append": False,
-        }
-
-        i = 0
-        while i < len(command):
-            token = command[i]
-
-            # Output redirection
-            if token in [">", ">>"]:
-                if i + 1 >= len(command):
-                    raise ValueError("Missing path for output redirection")
-                if i + 1 < len(command) and command[i + 1] in [">", ">>", "<"]:
-                    raise ValueError("Invalid redirection target: operator found")
-                path = command[i + 1]
-                redirects["stdout"] = path
-                redirects["stdout_append"] = token == ">>"
-                i += 2
-                continue
-
-            # Input redirection
-            if token == "<":
-                if i + 1 >= len(command):
-                    raise ValueError("Missing path for input redirection")
-                path = command[i + 1]
-                if path in [">", ">>", "<"]:
-                    raise ValueError("Invalid redirection target: operator found")
-                redirects["stdin"] = path
-                i += 2
-                continue
-
-            cmd.append(token)
-            i += 1
-
-        return cmd, redirects
-
-    async def _setup_redirects(
-        self,
-        redirects: Dict[str, Union[None, str, bool]],
-        directory: Optional[str] = None,
-    ) -> Dict[str, Union[IO[Any], int, str, None]]:
-        """
-        Set up file handles for redirections.
-
-        Args:
-            redirects (Dict[str, Union[None, str, bool]]): Redirection configuration
-            directory (Optional[str]): Working directory for file paths
-
-        Returns:
-            Dict[str, Union[IO[Any], int, str, None]]: File handles for subprocess
-        """
-        handles: Dict[str, Union[IO[Any], int, str, None]] = {}
-
-        # Handle input redirection
-        if redirects["stdin"]:
-            path = (
-                os.path.join(directory or "", str(redirects["stdin"]))
-                if directory and redirects["stdin"]
-                else str(redirects["stdin"])
-            )
-            try:
-                file = open(path, "r")
-                handles["stdin"] = asyncio.subprocess.PIPE
-                handles["stdin_data"] = file.read()
-                file.close()
-            except IOError as e:
-                raise ValueError(f"Failed to open input file: {e}") from e
-
-        # Handle output redirection
-        if redirects["stdout"]:
-            path = (
-                os.path.join(directory or "", str(redirects["stdout"]))
-                if directory and redirects["stdout"]
-                else str(redirects["stdout"])
-            )
-            mode = "a" if redirects["stdout_append"] else "w"
-            try:
-                handles["stdout"] = open(path, mode)
-            except IOError as e:
-                raise ValueError(f"Failed to open output file: {e}") from e
-        else:
-            handles["stdout"] = asyncio.subprocess.PIPE
-
-        handles["stderr"] = asyncio.subprocess.PIPE
-
-        return handles
-
-    async def _cleanup_handles(
-        self, handles: Dict[str, Union[IO[Any], int, None]]
-    ) -> None:
-        """
-        Clean up file handles after command execution.
-
-        Args:
-            handles (Dict[str, Union[IO[Any], int, None]]): File handles to clean up
-        """
-        for key in ["stdout", "stderr"]:
-            handle = handles.get(key)
-            if handle and hasattr(handle, "close") and not isinstance(handle, int):
-                try:
-                    handle.close()
-                except (IOError, ValueError):
-                    pass
+        self.io_handler = IORedirectionHandler()
 
     def _clean_command(self, command: List[str]) -> List[str]:
         """
@@ -176,7 +34,7 @@ class ShellExecutor:
         Returns:
             List[str]: Cleaned command
         """
-        return [arg for arg in command if arg]  # 空文字列のみを除外
+        return [arg for arg in command if arg]  # Remove empty strings
 
     def _create_shell_command(self, command: List[str]) -> str:
         """
@@ -188,12 +46,11 @@ class ShellExecutor:
 
         escaped_args = []
         for arg in command:
-            # すべての引数を適切にエスケープする
             if arg.isspace():
-                # 空白文字のみの場合はシングルクォートで囲む
+                # Wrap space-only arguments in single quotes
                 escaped_args.append(f"'{arg}'")
             else:
-                # ワイルドカードを含む場合も含めて、すべての引数を適切にエスケープ
+                # Properly escape all arguments including those with wildcards
                 escaped_args.append(shlex.quote(arg.strip()))
 
         return " ".join(escaped_args)
@@ -454,28 +311,15 @@ class ShellExecutor:
             if not cleaned_command:
                 raise ValueError("Empty command")
 
-            # Update stdin from redirects if present
-            if redirects["stdin"]:
-                stdin_path = self.directory_manager.get_absolute_path(
-                    str(redirects["stdin"]), directory
-                )
-                try:
-                    with open(stdin_path, "r") as f:
-                        stdin = f.read()
-                except IOError as e:
-                    raise ValueError(f"Failed to read input file: {e}") from e
+            # Process redirections
+            cmd, redirects = self.io_handler.process_redirections(cleaned_command)
 
-            # Setup output redirection
-            stdout_handle: Union[int, IO[Any]] = asyncio.subprocess.PIPE
-            if redirects["stdout"]:
-                stdout_path = self.directory_manager.get_absolute_path(
-                    str(redirects["stdout"]), directory
-                )
-                mode = "a" if redirects["stdout_append"] else "w"
-                try:
-                    stdout_handle = open(stdout_path, mode)
-                except IOError as e:
-                    raise ValueError(f"Failed to open output file: {e}") from e
+            # Setup handles for redirection
+            handles = await self.io_handler.setup_redirects(redirects, directory)
+
+            # Get stdin from handles if present
+            stdin = handles.get("stdin_data", stdin)
+            stdout_handle = handles.get("stdout", asyncio.subprocess.PIPE)
 
             # Execute the command with interactive shell
             shell = self._get_default_shell()
@@ -484,7 +328,6 @@ class ShellExecutor:
 
             process = await asyncio.create_subprocess_shell(
                 shell_cmd,
-                stdin=asyncio.subprocess.PIPE if stdin else None,
                 stdout=stdout_handle,
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ, **(envs or {})},  # Merge environment variables
@@ -500,7 +343,6 @@ class ShellExecutor:
                         return await process.communicate(input=stdin_bytes)
                     except Exception as e:
                         try:
-                            process.kill()
                             await process.wait()
                         except Exception:
                             pass
@@ -546,16 +388,18 @@ class ShellExecutor:
                     "execution_time": time.time() - start_time,
                 }
 
-        except Exception as e:
-            return {
-                "error": str(e),
-                "status": 1,
-                "stdout": "",
-                "stderr": str(e),
-                "execution_time": time.time() - start_time,
-            }
+            except Exception as e:  # Exception handler for subprocess
+                if isinstance(stdout_handle, IO):
+                    stdout_handle.close()
+                return {
+                    "error": str(e),
+                    "status": 1,
+                    "stdout": "",
+                    "stderr": str(e),
+                    "execution_time": time.time() - start_time,
+                }
+
         finally:
-            # Ensure process is terminated
             if process and process.returncode is None:
                 process.kill()
                 await process.wait()
@@ -576,26 +420,21 @@ class ShellExecutor:
             last_stdout: Optional[IO[Any]] = None
 
             for cmd in commands:
-                parsed_cmd, redirects = self._parse_command(cmd)
+                parsed_cmd, redirects = self.io_handler.process_redirections(cmd)
                 parsed_commands.append(parsed_cmd)
 
-                if commands.index(cmd) == 0 and redirects["stdin"]:
-                    stdin_path = self.directory_manager.get_absolute_path(
-                        str(redirects["stdin"]), directory
+                if commands.index(cmd) == 0:  # First command
+                    handles = await self.io_handler.setup_redirects(
+                        redirects, directory
                     )
-                    with open(stdin_path, "r") as f:
-                        first_stdin = f.read().encode()
+                    if handles.get("stdin_data"):
+                        first_stdin = handles["stdin_data"].encode()
 
-                if commands.index(cmd) == len(commands) - 1 and redirects["stdout"]:
-                    stdout_path = self.directory_manager.get_absolute_path(
-                        str(redirects["stdout"]), directory
+                if commands.index(cmd) == len(commands) - 1:  # Last command
+                    handles = await self.io_handler.setup_redirects(
+                        redirects, directory
                     )
-                    last_stdout = open(
-                        stdout_path, "a" if redirects["stdout_append"] else "w"
-                    )
-                    last_stdout = open(
-                        stdout_path, "a" if redirects["stdout_append"] else "w"
-                    )
+                    last_stdout = handles.get("stdout")
 
             # Execute pipeline
             prev_stdout: Optional[bytes] = first_stdin
@@ -671,5 +510,4 @@ class ShellExecutor:
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            if isinstance(last_stdout, IO):
-                last_stdout.close()
+            await self.io_handler.cleanup_handles({"stdout": last_stdout})
