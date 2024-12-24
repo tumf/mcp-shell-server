@@ -20,21 +20,21 @@ async def test_redirection_validation():
 
     # Missing path for output redirection
     with pytest.raises(ValueError, match="Missing path for output redirection"):
-        executor._process_redirections(["echo", "test", ">"])
+        executor.io_handler.process_redirections(["echo", "test", ">"])
 
     # Invalid redirection target (operator)
     with pytest.raises(
         ValueError, match="Invalid redirection syntax: consecutive operators"
     ):
-        executor._process_redirections(["echo", "test", ">", ">"])
+        executor.io_handler.process_redirections(["echo", "test", ">", ">"])
 
     # Missing path for input redirection
     with pytest.raises(ValueError, match="Missing path for input redirection"):
-        executor._process_redirections(["cat", "<"])
+        executor.io_handler.process_redirections(["cat", "<"])
 
     # Missing path for output redirection after input redirection
     with pytest.raises(ValueError, match="Missing path for output redirection"):
-        executor._process_redirections(["cat", "<", "input.txt", ">"])
+        executor.io_handler.process_redirections(["cat", "<", "input.txt", ">"])
 
 
 @pytest.mark.asyncio
@@ -45,15 +45,15 @@ async def test_directory_validation(monkeypatch):
 
     # Directory validation is performed in the _validate_directory method
     with pytest.raises(ValueError, match="Directory is required"):
-        executor._validate_directory(None)
+        executor.directory_manager.validate_directory(None)
 
     # Directory is not absolute path
     with pytest.raises(ValueError, match="Directory must be an absolute path"):
-        executor._validate_directory("relative/path")
+        executor.directory_manager.validate_directory("relative/path")
 
     # Directory does not exist
     with pytest.raises(ValueError, match="Directory does not exist"):
-        executor._validate_directory("/path/does/not/exist")
+        executor.directory_manager.validate_directory("/path/does/not/exist")
 
 
 @pytest.mark.asyncio
