@@ -1,8 +1,9 @@
 """Process management for shell command execution."""
+
 import asyncio
 import logging
 import os
-from typing import Dict, IO, Optional, Tuple, Any, List
+from typing import IO, Any, Dict, List, Optional, Tuple
 
 
 class ProcessManager:
@@ -115,14 +116,18 @@ class ProcessManager:
 
                 try:
                     stdout, stderr = await self.execute_with_timeout(
-                        process, stdin=prev_stdout.decode() if prev_stdout else None, timeout=timeout
+                        process,
+                        stdin=prev_stdout.decode() if prev_stdout else None,
+                        timeout=timeout,
                     )
 
                     final_stderr += stderr if stderr else b""
                     if process.returncode != 0:
                         error_msg = stderr.decode("utf-8", errors="replace").strip()
                         if not error_msg:
-                            error_msg = f"Command failed with exit code {process.returncode}"
+                            error_msg = (
+                                f"Command failed with exit code {process.returncode}"
+                            )
                         raise ValueError(error_msg)
 
                     if i == len(commands) - 1:
@@ -140,12 +145,22 @@ class ProcessManager:
                     process.kill()
                     raise
 
-            return final_stdout, final_stderr, processes[-1].returncode if processes else 1
+            return (
+                final_stdout,
+                final_stderr,
+                (
+                    processes[-1].returncode
+                    if processes and processes[-1].returncode is not None
+                    else 1
+                ),
+            )
 
         finally:
             await self.cleanup_processes(processes)
 
-    async def cleanup_processes(self, processes: List[asyncio.subprocess.Process]) -> None:
+    async def cleanup_processes(
+        self, processes: List[asyncio.subprocess.Process]
+    ) -> None:
         """Clean up processes by killing them if they're still running.
 
         Args:

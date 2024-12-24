@@ -12,6 +12,7 @@ from mcp_shell_server.directory_manager import DirectoryManager
 from mcp_shell_server.io_redirection_handler import IORedirectionHandler
 from mcp_shell_server.process_manager import ProcessManager
 
+
 class ShellExecutor:
     """
     Executes shell commands in a secure manner by validating against a whitelist.
@@ -226,10 +227,7 @@ class ShellExecutor:
             shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
 
             process = await self.process_manager.create_process(
-                shell_cmd,
-                directory,
-                stdout_handle=stdout_handle,
-                envs=envs
+                shell_cmd, directory, stdout_handle=stdout_handle, envs=envs
             )
 
             try:
@@ -248,9 +246,7 @@ class ShellExecutor:
 
                 try:
                     stdout, stderr = await self.process_manager.execute_with_timeout(
-                        process,
-                        stdin=stdin,
-                        timeout=timeout
+                        process, stdin=stdin, timeout=timeout
                     )
 
                     # Close file handle if using file redirection
@@ -382,25 +378,27 @@ class ShellExecutor:
 
                 try:
                     # Execute the current command using ProcessManager
+                    shell_cmd = " ".join(map(shlex.quote, parsed_commands[i]))
                     process = await self.process_manager.create_process(
-                        cmd_str,
+                        shell_cmd,
                         directory,
                         stdout_handle=(
                             asyncio.subprocess.PIPE
                             if i < len(parsed_commands) - 1 or not last_stdout
                             else last_stdout
                         ),
-                        envs=envs
+                        envs=envs,
                     )
-                    
                     stdout, stderr = await self.process_manager.execute_with_timeout(
                         process,
                         stdin=prev_stdout.decode() if prev_stdout else None,
-                        timeout=timeout
+                        timeout=timeout,
                     )
 
                     # Collect stderr and check return code
-                    final_stderr += stderr if stderr else b""
+                    final_stderr = final_stderr + (
+                        stderr if stderr is not None else b""
+                    )
                     if process.returncode != 0:
                         error_msg = stderr.decode("utf-8", errors="replace").strip()
                         if not error_msg:
