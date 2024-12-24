@@ -10,7 +10,7 @@ from mcp_shell_server.command_preprocessor import CommandPreProcessor
 from mcp_shell_server.command_validator import CommandValidator
 from mcp_shell_server.directory_manager import DirectoryManager
 from mcp_shell_server.io_redirection_handler import IORedirectionHandler
-
+from mcp_shell_server.process_manager import ProcessManager
 
 class ShellExecutor:
     """
@@ -22,6 +22,10 @@ class ShellExecutor:
         Initialize the executor with a command validator, directory manager and IO handler.
         """
         self.validator = CommandValidator()
+        self.directory_manager = DirectoryManager()
+        self.io_handler = IORedirectionHandler()
+        self.preprocessor = CommandPreProcessor()
+        self.process_manager = ProcessManager()
         self.directory_manager = DirectoryManager()
         self.io_handler = IORedirectionHandler()
         self.preprocessor = CommandPreProcessor()
