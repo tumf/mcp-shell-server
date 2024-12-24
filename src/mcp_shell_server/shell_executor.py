@@ -225,13 +225,11 @@ class ShellExecutor:
             shell_cmd = self.preprocessor.create_shell_command(cmd)
             shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
 
-            process = await asyncio.create_subprocess_shell(
+            process = await self.process_manager.create_process(
                 shell_cmd,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=stdout_handle,
-                stderr=asyncio.subprocess.PIPE,
-                env={**os.environ, **(envs or {})},  # Merge environment variables
-                cwd=directory,
+                directory,
+                stdout_handle=stdout_handle,
+                envs=envs
             )
 
             try:
@@ -248,36 +246,36 @@ class ShellExecutor:
                             pass
                         raise e
 
-                if timeout:
-                    stdout, stderr = await asyncio.wait_for(
-                        communicate_with_timeout(), timeout=timeout
-                    )
-                else:
-                    stdout, stderr = await communicate_with_timeout()
-
-                # Close file handle if using file redirection
-                if isinstance(stdout_handle, IO):
-                    try:
-                        stdout_handle.close()
-                    except (IOError, OSError) as e:
-                        logging.warning(f"Error closing stdout: {e}")
-
-                return {
-                    "error": None,
-                    "stdout": stdout.decode() if stdout else "",
-                    "stderr": stderr.decode() if stderr else "",
-                    "status": process.returncode,
-                    "execution_time": time.time() - start_time,
-                    "directory": directory,
-                }
-
-            except asyncio.TimeoutError:
-                # Kill process on timeout
                 try:
-                    process.kill()
-                    await process.wait()
-                except ProcessLookupError:
-                    pass
+                    stdout, stderr = await self.process_manager.execute_with_timeout(
+                        process,
+                        stdin=stdin,
+                        timeout=timeout
+                    )
+
+                    # Close file handle if using file redirection
+                    if isinstance(stdout_handle, IO):
+                        try:
+                            stdout_handle.close()
+                        except (IOError, OSError) as e:
+                            logging.warning(f"Error closing stdout: {e}")
+
+                    return {
+                        "error": None,
+                        "stdout": stdout.decode() if stdout else "",
+                        "stderr": stderr.decode() if stderr else "",
+                        "status": process.returncode,
+                        "execution_time": time.time() - start_time,
+                        "directory": directory,
+                    }
+
+                except asyncio.TimeoutError:
+                    # Kill process on timeout
+                    try:
+                        process.kill()
+                        await process.wait()
+                    except ProcessLookupError:
+                        pass
 
                 # Clean up file handle
                 if isinstance(stdout_handle, IO):
