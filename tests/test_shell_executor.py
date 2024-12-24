@@ -440,31 +440,31 @@ def test_validate_redirection_syntax(executor):
 def test_create_shell_command(executor):
     """Test shell command creation with various input combinations"""
     # Test basic command
-    assert executor._create_shell_command(["echo", "hello"]) == "echo hello"
+    assert executor.preprocessor.create_shell_command(["echo", "hello"]) == "echo hello"
 
     # Test command with space-only argument
-    assert executor._create_shell_command(["echo", " "]) == "echo ' '"
+    assert executor.preprocessor.create_shell_command(["echo", " "]) == "echo ' '"
 
     # Test command with wildcards
-    assert executor._create_shell_command(["ls", "*.txt"]) == "ls '*.txt'"
+    assert executor.preprocessor.create_shell_command(["ls", "*.txt"]) == "ls '*.txt'"
 
     # Test command with special characters
     assert (
-        executor._create_shell_command(["echo", "hello;", "world"])
+        executor.preprocessor.create_shell_command(["echo", "hello;", "world"])
         == "echo 'hello;' world"
     )
 
     # Test empty command
-    assert executor._create_shell_command([]) == ""
+    assert executor.preprocessor.create_shell_command([]) == ""
 
 
 def test_preprocess_command(executor):
     """Test command preprocessing for pipeline handling"""
     # Test basic command
-    assert executor._preprocess_command(["ls"]) == ["ls"]
+    assert executor.preprocessor.preprocess_command(["ls"]) == ["ls"]
 
     # Test command with separate pipe
-    assert executor._preprocess_command(["ls", "|", "grep", "test"]) == [
+    assert executor.preprocessor.preprocess_command(["ls", "|", "grep", "test"]) == [
         "ls",
         "|",
         "grep",
@@ -472,7 +472,7 @@ def test_preprocess_command(executor):
     ]
 
     # Test command with attached pipe
-    assert executor._preprocess_command(["ls|", "grep", "test"]) == [
+    assert executor.preprocessor.preprocess_command(["ls|", "grep", "test"]) == [
         "ls",
         "|",
         "grep",
@@ -480,7 +480,7 @@ def test_preprocess_command(executor):
     ]
 
     # Test command with special operators
-    assert executor._preprocess_command(["echo", "hello", "&&", "ls"]) == [
+    assert executor.preprocessor.preprocess_command(["echo", "hello", "&&", "ls"]) == [
         "echo",
         "hello",
         "&&",
@@ -488,7 +488,7 @@ def test_preprocess_command(executor):
     ]
 
     # Test empty command
-    assert executor._preprocess_command([]) == []
+    assert executor.preprocessor.preprocess_command([]) == []
 
 
 def test_validate_pipeline(executor, monkeypatch):
@@ -507,33 +507,35 @@ def test_validate_pipeline(executor, monkeypatch):
 
     # Test disallowed commands in pipeline
     with pytest.raises(ValueError) as exc:
-        executor._validate_pipeline(["rm", "|", "grep", "test"])
+        executor.validator.validate_pipeline(["rm", "|", "grep", "test"])
     assert "Command not allowed: rm" in str(exc.value)
 
     # Test shell operators in pipeline
     with pytest.raises(ValueError) as exc:
-        executor._validate_pipeline(["echo", "hello", "|", "grep", "h", "&&", "ls"])
+        executor.validator.validate_pipeline(
+            ["echo", "hello", "|", "grep", "h", "&&", "ls"]
+        )
     assert "Unexpected shell operator in pipeline: &&" in str(exc.value)
-    assert executor._preprocess_command([]) == []
+    assert executor.preprocessor.preprocess_command([]) == []
 
 
 def test_redirection_path_validation(executor):
     """Test validation of redirection paths"""
     # Test missing output redirection path
     with pytest.raises(ValueError, match="Missing path for output redirection"):
-        executor._parse_command(["echo", "hello", ">"])
+        executor.preprocessor.parse_command(["echo", "hello", ">"])
 
     # Test missing input redirection path
     with pytest.raises(ValueError, match="Missing path for input redirection"):
-        executor._parse_command(["cat", "<"])
+        executor.preprocessor.parse_command(["cat", "<"])
 
     # Test operator as redirection target
     with pytest.raises(ValueError, match="Invalid redirection target: operator found"):
-        executor._parse_command(["echo", "hello", ">", ">"])
+        executor.preprocessor.parse_command(["echo", "hello", ">", ">"])
 
     # Test multiple operators
     with pytest.raises(ValueError, match="Invalid redirection target: operator found"):
-        executor._parse_command(["echo", "hello", ">", ">>", "file.txt"])
+        executor.preprocessor.parse_command(["echo", "hello", ">", ">>", "file.txt"])
 
 
 @pytest.mark.asyncio
@@ -565,13 +567,18 @@ async def test_io_handle_close(executor, temp_test_dir, monkeypatch, mocker):
 def test_preprocess_command_pipeline(executor):
     """Test pipeline command preprocessing functionality"""
     # Test empty command
-    assert executor._preprocess_command([]) == []
+    assert executor.preprocessor.preprocess_command([]) == []
 
     # Test single command without pipe
-    assert executor._preprocess_command(["echo", "hello"]) == ["echo", "hello"]
+    assert executor.preprocessor.preprocess_command(["echo", "hello"]) == [
+        "echo",
+        "hello",
+    ]
 
     # Test simple pipe
-    assert executor._preprocess_command(["echo", "hello", "|", "grep", "h"]) == [
+    assert executor.preprocessor.preprocess_command(
+        ["echo", "hello", "|", "grep", "h"]
+    ) == [
         "echo",
         "hello",
         "|",
@@ -580,12 +587,12 @@ def test_preprocess_command_pipeline(executor):
     ]
 
     # Test multiple pipes
-    assert executor._preprocess_command(
+    assert executor.preprocessor.preprocess_command(
         ["cat", "file", "|", "grep", "pattern", "|", "wc", "-l"]
     ) == ["cat", "file", "|", "grep", "pattern", "|", "wc", "-l"]
 
     # Test command with attached pipe operator
-    assert executor._preprocess_command(["echo|", "grep", "pattern"]) == [
+    assert executor.preprocessor.preprocess_command(["echo|", "grep", "pattern"]) == [
         "echo",
         "|",
         "grep",

@@ -4,8 +4,9 @@ import os
 import pwd
 import shlex
 import time
-from typing import IO, Any, Dict, List, Optional, Tuple, Union
+from typing import IO, Any, Dict, List, Optional
 
+from mcp_shell_server.command_preprocessor import CommandPreProcessor
 from mcp_shell_server.command_validator import CommandValidator
 from mcp_shell_server.directory_manager import DirectoryManager
 from mcp_shell_server.io_redirection_handler import IORedirectionHandler
@@ -23,38 +24,7 @@ class ShellExecutor:
         self.validator = CommandValidator()
         self.directory_manager = DirectoryManager()
         self.io_handler = IORedirectionHandler()
-
-    def _clean_command(self, command: List[str]) -> List[str]:
-        """
-        Clean command by trimming whitespace from each part.
-        Removes empty strings but preserves arguments that are meant to be spaces.
-
-        Args:
-            command (List[str]): Original command and its arguments
-
-        Returns:
-            List[str]: Cleaned command
-        """
-        return [arg for arg in command if arg]  # Remove empty strings
-
-    def _create_shell_command(self, command: List[str]) -> str:
-        """
-        Create a shell command string from a list of arguments.
-        Handles wildcards and arguments properly.
-        """
-        if not command:
-            return ""
-
-        escaped_args = []
-        for arg in command:
-            if arg.isspace():
-                # Wrap space-only arguments in single quotes
-                escaped_args.append(f"'{arg}'")
-            else:
-                # Properly escape all arguments including those with wildcards
-                escaped_args.append(shlex.quote(arg.strip()))
-
-        return " ".join(escaped_args)
+        self.preprocessor = CommandPreProcessor()
 
     def _validate_command(self, command: List[str]) -> None:
         """
@@ -95,97 +65,6 @@ class ShellExecutor:
         """
         return self.validator.validate_pipeline(commands)
 
-    def _split_pipe_commands(self, command: List[str]) -> List[List[str]]:
-        """
-        Split commands by pipe operator into separate commands.
-
-        Args:
-            command (List[str]): Command and its arguments with pipe operators
-
-        Returns:
-            List[List[str]]: List of commands split by pipe operator
-        """
-        commands: List[List[str]] = []
-        current_command: List[str] = []
-
-        for arg in command:
-            if arg.strip() == "|":
-                if current_command:
-                    commands.append(current_command)
-                    current_command = []
-            else:
-                current_command.append(arg)
-
-        if current_command:
-            commands.append(current_command)
-
-        return commands
-
-    def _parse_command(
-        self, command: List[str]
-    ) -> Tuple[List[str], Dict[str, Union[None, str, bool]]]:
-        """
-        Parse command and extract redirections.
-        """
-        cmd = []
-        redirects: Dict[str, Union[None, str, bool]] = {
-            "stdin": None,
-            "stdout": None,
-            "stdout_append": False,
-        }
-
-        i = 0
-        while i < len(command):
-            token = command[i]
-
-            # Shell operators check
-            if token in ["|", ";", "&&", "||"]:
-                raise ValueError(f"Unexpected shell operator: {token}")
-
-            # Output redirection
-            if token in [">", ">>"]:
-                if i + 1 >= len(command):
-                    raise ValueError("Missing path for output redirection")
-                if i + 1 < len(command) and command[i + 1] in [">", ">>", "<"]:
-                    raise ValueError("Invalid redirection target: operator found")
-                path = command[i + 1]
-                redirects["stdout"] = path
-                redirects["stdout_append"] = token == ">>"
-                i += 2
-                continue
-
-            # Input redirection
-            if token == "<":
-                if i + 1 >= len(command):
-                    raise ValueError("Missing path for input redirection")
-                path = command[i + 1]
-                redirects["stdin"] = path
-                i += 2
-                continue
-
-            cmd.append(token)
-            i += 1
-
-        return cmd, redirects
-
-    def _preprocess_command(self, command: List[str]) -> List[str]:
-        """
-        Preprocess the command to handle cases where '|' is attached to a command.
-        """
-        preprocessed_command = []
-        for token in command:
-            if token in ["||", "&&", ";"]:  # 特別なシェル演算子を保護
-                preprocessed_command.append(token)
-            elif "|" in token and token != "|":
-                parts = token.split("|")
-                preprocessed_command.extend(
-                    [part.strip() for part in parts if part.strip()]
-                )
-                preprocessed_command.append("|")
-            else:
-                preprocessed_command.append(token)
-        return preprocessed_command
-
     def _get_default_shell(self) -> str:
         """Get the login shell of the current user"""
         try:
@@ -218,8 +97,8 @@ class ShellExecutor:
                 }
 
             # Process command
-            preprocessed_command = self._preprocess_command(command)
-            cleaned_command = self._clean_command(preprocessed_command)
+            preprocessed_command = self.preprocessor.preprocess_command(command)
+            cleaned_command = self.preprocessor.clean_command(preprocessed_command)
             if not cleaned_command:
                 return {
                     "error": "Empty command",
@@ -245,19 +124,9 @@ class ShellExecutor:
                         }
 
                     # Split commands
-                    commands: List[List[str]] = []
-                    current_cmd: List[str] = []
-                    for token in cleaned_command:
-                        if token == "|":
-                            if current_cmd:
-                                commands.append(current_cmd)
-                                current_cmd = []
-                            else:
-                                raise ValueError("Empty command before pipe operator")
-                        else:
-                            current_cmd.append(token)
-                    if current_cmd:
-                        commands.append(current_cmd)
+                    commands = self.preprocessor.split_pipe_commands(cleaned_command)
+                    if not commands:
+                        raise ValueError("Empty command before pipe operator")
 
                     return await self._execute_pipeline(
                         commands, directory, timeout, envs
@@ -286,7 +155,7 @@ class ShellExecutor:
 
             # Single command execution
             try:
-                cmd, redirects = self._parse_command(cleaned_command)
+                cmd, redirects = self.preprocessor.parse_command(cleaned_command)
             except ValueError as e:
                 return {
                     "error": str(e),
@@ -349,7 +218,7 @@ class ShellExecutor:
 
             # Execute the command with interactive shell
             shell = self._get_default_shell()
-            shell_cmd = self._create_shell_command(cmd)
+            shell_cmd = self.preprocessor.create_shell_command(cmd)
             shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
 
             process = await asyncio.create_subprocess_shell(
@@ -488,7 +357,7 @@ class ShellExecutor:
             # Execute each command in the pipeline
             for i, cmd in enumerate(parsed_commands):
                 # Create the shell command
-                shell_cmd = self._create_shell_command(cmd)
+                shell_cmd = self.preprocessor.create_shell_command(cmd)
 
                 # Apply interactive mode to first command only
                 if i == 0:

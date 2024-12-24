@@ -30,18 +30,20 @@ def temp_test_dir():
 async def test_pipeline_split(executor):
     """Test pipeline command splitting functionality"""
     # Test basic pipe command
-    commands = executor._split_pipe_commands(["echo", "hello", "|", "grep", "h"])
+    commands = executor.preprocessor.split_pipe_commands(
+        ["echo", "hello", "|", "grep", "h"]
+    )
     assert len(commands) == 2
     assert commands[0] == ["echo", "hello"]
     assert commands[1] == ["grep", "h"]
 
     # Test empty pipe sections
-    commands = executor._split_pipe_commands(["|", "grep", "pattern"])
+    commands = executor.preprocessor.split_pipe_commands(["|", "grep", "pattern"])
     assert len(commands) == 1
     assert commands[0] == ["grep", "pattern"]
 
     # Test multiple pipes
-    commands = executor._split_pipe_commands(
+    commands = executor.preprocessor.split_pipe_commands(
         ["cat", "file.txt", "|", "grep", "pattern", "|", "wc", "-l"]
     )
     assert len(commands) == 3
@@ -50,7 +52,7 @@ async def test_pipeline_split(executor):
     assert commands[2] == ["wc", "-l"]
 
     # Test trailing pipe
-    commands = executor._split_pipe_commands(["echo", "hello", "|"])
+    commands = executor.preprocessor.split_pipe_commands(["echo", "hello", "|"])
     assert len(commands) == 1
     assert commands[0] == ["echo", "hello"]
 
