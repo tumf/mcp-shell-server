@@ -1,15 +1,18 @@
 name: Publish
+
 on:
   push:
     tags:
       - "v*"
-    strategy:
-      matrix:
-        python-version: ["3.11"]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11"]
+
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,14 +26,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install uv
 
-      - name: Install dev/test dependencies
+      - name: Install dependencies
         run: |
-          pip install -e ".[dev]"
-          pip install -e ".[test]"
+          uv pip install -e ".[dev,test]"
 
-      - name: Run tests
+      - name: Run tests and checks
         run: |
-          make check
+          make all
 
   publish:
     needs: test
@@ -44,14 +46,13 @@ jobs:
 
       - name: Update version from tag
         run: |
-          # Strip 'v' prefix from tag and update version.py
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "__version__ = \"${VERSION}\"" > src/mcp_shell_server/version.py
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -60,10 +61,10 @@ jobs:
 
       - name: Build package
         run: |
-          uv build
+          uv pip install build
+          python -m build
 
       - name: Publish to PyPI
-        env:
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          uv publish --token $PYPI_TOKEN
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}

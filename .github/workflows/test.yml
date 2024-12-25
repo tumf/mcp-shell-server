@@ -8,11 +8,12 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.11"]
 
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,18 +27,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install uv
 
-      - name: Install dev/test dependencies
+      - name: Install dependencies
         run: |
-          pip install -e ".[dev]"
-          pip install -e ".[test]"
+          uv pip install -e ".[dev,test]"
 
-      - name: Run lint and typecheck
+      - name: Run format checks and typecheck
         run: |
-          make lint typecheck
+          make check
 
       - name: Run tests with coverage
         run: |
-          pytest --cov --cov-report=xml
+          make coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
