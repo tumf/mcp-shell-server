@@ -83,8 +83,9 @@ async def test_list_tools():
 
 
 @pytest.mark.asyncio
-async def test_tool_execution_timeout():
+async def test_tool_execution_timeout(monkeypatch):
     """Test tool execution with timeout"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
     with pytest.raises(RuntimeError, match="Command execution timed out"):
         await call_tool(
             "shell_execute",

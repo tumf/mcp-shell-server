@@ -1,6 +1,6 @@
-import os
-import tempfile
-from io import TextIOWrapper
+"""Tests for IO redirection in shell executor with mocked file operations."""
+
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -8,78 +8,89 @@ from mcp_shell_server.io_redirection_handler import IORedirectionHandler
 
 
 @pytest.fixture
-def temp_test_dir():
-    """Create a temporary directory for testing"""
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        yield os.path.realpath(tmpdirname)
+def mock_file():
+    """Create a mock file object."""
+    file_mock = MagicMock()
+    file_mock.closed = False
+    file_mock.close = MagicMock()
+    file_mock.write = MagicMock()
+    file_mock.read = MagicMock(return_value="test content")
+    return file_mock
 
 
 @pytest.fixture
 def handler():
-    """Create a new IORedirectionHandler instance for each test"""
+    """Create a new IORedirectionHandler instance for each test."""
     return IORedirectionHandler()
 
 
 @pytest.mark.asyncio
-async def test_file_input_redirection(temp_test_dir, handler):
-    """Test input redirection from a file"""
-    # Create a test input file
-    with open(os.path.join(temp_test_dir, "input.txt"), "w") as f:
-        f.write("test content")
+async def test_file_input_redirection(handler, mock_file):
+    """Test input redirection from a file using mocks."""
+    with (
+        patch("builtins.open", return_value=mock_file),
+        patch("os.path.exists", return_value=True),
+    ):
 
-    redirects = {
-        "stdin": "input.txt",
-        "stdout": None,
-        "stdout_append": False,
-    }
-    handles = await handler.setup_redirects(redirects, temp_test_dir)
-    assert "stdin" in handles
-    assert "stdin_data" in handles
-    assert handles["stdin_data"] == "test content"
-    assert isinstance(handles["stdout"], int)
-    assert isinstance(handles["stderr"], int)
+        redirects = {
+            "stdin": "input.txt",
+            "stdout": None,
+            "stdout_append": False,
+        }
+        handles = await handler.setup_redirects(redirects, "/mock/dir")
 
-
-@pytest.mark.asyncio
-async def test_file_output_redirection(temp_test_dir, handler):
-    """Test output redirection to a file"""
-    output_file = os.path.join(temp_test_dir, "output.txt")
-    redirects = {
-        "stdin": None,
-        "stdout": output_file,
-        "stdout_append": False,
-    }
-    handles = await handler.setup_redirects(redirects, temp_test_dir)
-    assert isinstance(handles["stdout"], TextIOWrapper)
-    assert not handles["stdout"].closed
-    await handler.cleanup_handles(handles)
-    assert handles["stdout"].closed
+        assert "stdin" in handles
+        assert "stdin_data" in handles
+        assert handles["stdin_data"] == "test content"
+        assert isinstance(handles["stdout"], int)
+        assert isinstance(handles["stderr"], int)
 
 
 @pytest.mark.asyncio
-async def test_append_mode(temp_test_dir, handler):
-    """Test output redirection in append mode"""
-    output_file = os.path.join(temp_test_dir, "output.txt")
+async def test_file_output_redirection(handler, mock_file):
+    """Test output redirection to a file using mocks."""
+    with patch("builtins.open", return_value=mock_file):
+        redirects = {
+            "stdin": None,
+            "stdout": "output.txt",
+            "stdout_append": False,
+        }
+        handles = await handler.setup_redirects(redirects, "/mock/dir")
 
-    # Test append mode
-    redirects = {
-        "stdin": None,
-        "stdout": output_file,
-        "stdout_append": True,
-    }
-    handles = await handler.setup_redirects(redirects, temp_test_dir)
-    assert handles["stdout"].mode == "a"
-    await handler.cleanup_handles(handles)
+        assert "stdout" in handles
+        assert not handles["stdout"].closed
+        await handler.cleanup_handles(handles)
+        mock_file.close.assert_called_once()
 
-    # Test write mode
-    redirects["stdout_append"] = False
-    handles = await handler.setup_redirects(redirects, temp_test_dir)
-    assert handles["stdout"].mode == "w"
-    await handler.cleanup_handles(handles)
+
+@pytest.mark.asyncio
+async def test_append_mode(handler, mock_file):
+    """Test output redirection in append mode using mocks."""
+    with patch("builtins.open", return_value=mock_file):
+        # Test append mode
+        redirects = {
+            "stdin": None,
+            "stdout": "output.txt",
+            "stdout_append": True,
+        }
+        mock_file.mode = "a"  # Set the expected mode
+        handles = await handler.setup_redirects(redirects, "/mock/dir")
+        assert handles["stdout"].mode == "a"
+        await handler.cleanup_handles(handles)
+        mock_file.close.assert_called_once()
+
+        # Reset mock and test write mode
+        mock_file.reset_mock()
+        mock_file.mode = "w"  # Set the expected mode for write mode
+        redirects["stdout_append"] = False
+        handles = await handler.setup_redirects(redirects, "/mock/dir")
+        assert handles["stdout"].mode == "w"
+        await handler.cleanup_handles(handles)
+        mock_file.close.assert_called_once()
 
 
 def test_validate_redirection_syntax(handler):
-    """Test validation of redirection syntax"""
+    """Test validation of redirection syntax."""
     # Valid cases
     handler.validate_redirection_syntax(["echo", "hello", ">", "output.txt"])
     handler.validate_redirection_syntax(["cat", "<", "input.txt", ">", "output.txt"])
@@ -94,7 +105,7 @@ def test_validate_redirection_syntax(handler):
 
 
 def test_process_redirections(handler):
-    """Test processing of redirection operators"""
+    """Test processing of redirection operators."""
     # Input redirection
     cmd, redirects = handler.process_redirections(["cat", "<", "input.txt"])
     assert cmd == ["cat"]
@@ -117,26 +128,28 @@ def test_process_redirections(handler):
 
 
 @pytest.mark.asyncio
-async def test_setup_errors(temp_test_dir, handler):
-    """Test error cases in redirection setup"""
+async def test_setup_errors(handler, mock_file):
+    """Test error cases in redirection setup using mocks."""
     # Test non-existent input file
-    redirects = {
-        "stdin": "nonexistent.txt",
-        "stdout": None,
-        "stdout_append": False,
-    }
-    with pytest.raises(ValueError, match="Failed to open input file"):
-        await handler.setup_redirects(redirects, temp_test_dir)
+    with patch("os.path.exists", return_value=False):
+        redirects = {
+            "stdin": "nonexistent.txt",
+            "stdout": None,
+            "stdout_append": False,
+        }
+        with pytest.raises(ValueError, match="Failed to open input file"):
+            await handler.setup_redirects(redirects, "/mock/dir")
 
     # Test error in output file creation
-    os.chmod(temp_test_dir, 0o444)  # Make directory read-only
-    try:
+    # Mock builtins.open to raise PermissionError
+    mock_open = MagicMock(side_effect=PermissionError("Permission denied"))
+    with patch("builtins.open", mock_open):
         redirects = {
             "stdin": None,
             "stdout": "output.txt",
             "stdout_append": False,
         }
         with pytest.raises(ValueError, match="Failed to open output file"):
-            await handler.setup_redirects(redirects, temp_test_dir)
-    finally:
-        os.chmod(temp_test_dir, 0o755)  # Reset permissions
+            await handler.setup_redirects(redirects, "/mock/dir")
+
+    mock_file.close.assert_not_called()

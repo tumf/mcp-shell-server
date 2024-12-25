@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import os
-from typing import IO, Any, Dict, List, Optional, Tuple
+from typing import IO, Any, Dict, List, Optional, Tuple, Union
 
 
 class ProcessManager:
@@ -29,14 +29,19 @@ class ProcessManager:
         Returns:
             asyncio.subprocess.Process: Created process
         """
-        return await asyncio.create_subprocess_shell(
-            shell_cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=stdout_handle,
-            stderr=asyncio.subprocess.PIPE,
-            env={**os.environ, **(envs or {})},
-            cwd=directory,
-        )
+        try:
+            return await asyncio.create_subprocess_shell(
+                shell_cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=stdout_handle,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, **(envs or {})},
+                cwd=directory,
+            )
+        except OSError as e:
+            raise ValueError(f"Failed to create process: {str(e)}") from e
+        except Exception as e:
+            raise ValueError(f"Unexpected error: {str(e)}") from e
 
     async def execute_with_timeout(
         self,
@@ -62,6 +67,9 @@ class ProcessManager:
         async def communicate_with_timeout():
             try:
                 return await process.communicate(input=stdin_bytes)
+            except asyncio.TimeoutError:
+                process.kill()  # Kill process on timeout
+                raise
             except Exception as e:
                 try:
                     await process.wait()
@@ -77,7 +85,7 @@ class ProcessManager:
         self,
         commands: List[str],
         first_stdin: Optional[bytes] = None,
-        last_stdout: Optional[IO[Any]] = None,
+        last_stdout: Union[IO[Any], int, None] = None,
         directory: Optional[str] = None,
         timeout: Optional[int] = None,
         envs: Optional[Dict[str, str]] = None,
@@ -94,7 +102,13 @@ class ProcessManager:
 
         Returns:
             Tuple[bytes, bytes, int]: Tuple of (stdout, stderr, return_code)
+
+        Raises:
+            ValueError: If no commands provided or command execution fails
         """
+        if not commands:
+            raise ValueError("No commands provided")
+
         processes: List[asyncio.subprocess.Process] = []
         try:
             prev_stdout: Optional[bytes] = first_stdin
@@ -166,10 +180,20 @@ class ProcessManager:
         Args:
             processes: List of processes to clean up
         """
+        cleanup_tasks = []
         for process in processes:
             if process.returncode is None:
                 try:
                     process.kill()
-                    await process.wait()
+                    cleanup_tasks.append(asyncio.create_task(process.wait()))
                 except Exception as e:
                     logging.warning(f"Error cleaning up process: {e}")
+
+        if cleanup_tasks:
+            try:
+                # Set a timeout for cleanup to prevent hanging
+                await asyncio.wait_for(asyncio.gather(*cleanup_tasks), timeout=5)
+            except asyncio.TimeoutError:
+                logging.warning("Process cleanup timed out")
+            except Exception as e:
+                logging.warning(f"Error during process cleanup: {e}")

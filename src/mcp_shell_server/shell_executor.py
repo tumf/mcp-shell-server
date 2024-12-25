@@ -4,7 +4,7 @@ import os
 import pwd
 import shlex
 import time
-from typing import IO, Any, Dict, List, Optional
+from typing import IO, Any, Dict, List, Optional, Union
 
 from mcp_shell_server.command_preprocessor import CommandPreProcessor
 from mcp_shell_server.command_validator import CommandValidator
@@ -18,18 +18,19 @@ class ShellExecutor:
     Executes shell commands in a secure manner by validating against a whitelist.
     """
 
-    def __init__(self):
+    def __init__(self, process_manager: Optional[ProcessManager] = None):
         """
         Initialize the executor with a command validator, directory manager and IO handler.
+        Args:
+            process_manager: Optional ProcessManager instance for testing
         """
         self.validator = CommandValidator()
         self.directory_manager = DirectoryManager()
         self.io_handler = IORedirectionHandler()
         self.preprocessor = CommandPreProcessor()
-        self.process_manager = ProcessManager()
-        self.directory_manager = DirectoryManager()
-        self.io_handler = IORedirectionHandler()
-        self.preprocessor = CommandPreProcessor()
+        self.process_manager = (
+            process_manager if process_manager is not None else ProcessManager()
+        )
 
     def _validate_command(self, command: List[str]) -> None:
         """
@@ -202,12 +203,26 @@ class ShellExecutor:
             if not cleaned_command:
                 raise ValueError("Empty command")
 
+            # Initialize stdout_handle with default value
+            stdout_handle: Union[IO[Any], int] = asyncio.subprocess.PIPE
+
             try:
                 # Process redirections
                 cmd, redirects = self.io_handler.process_redirections(cleaned_command)
 
                 # Setup handles for redirection
                 handles = await self.io_handler.setup_redirects(redirects, directory)
+
+                # Get stdin and stdout from handles if present
+                stdin_data = handles.get("stdin_data")
+                if isinstance(stdin_data, str):
+                    stdin = stdin_data
+
+                # Get stdout handle if present
+                stdout_value = handles.get("stdout")
+                if isinstance(stdout_value, (IO, int)):
+                    stdout_handle = stdout_value
+
             except ValueError as e:
                 return {
                     "error": str(e),
@@ -216,10 +231,6 @@ class ShellExecutor:
                     "stderr": str(e),
                     "execution_time": time.time() - start_time,
                 }
-
-                # Get stdin from handles if present
-            stdin = handles.get("stdin_data", stdin)
-            stdout_handle = handles.get("stdout", asyncio.subprocess.PIPE)
 
             # Execute the command with interactive shell
             shell = self._get_default_shell()
@@ -245,45 +256,56 @@ class ShellExecutor:
                         raise e
 
                 try:
-                    stdout, stderr = await self.process_manager.execute_with_timeout(
-                        process, stdin=stdin, timeout=timeout
+                    # プロセス通信実行
+                    stdout, stderr = await asyncio.shield(
+                        self.process_manager.execute_with_timeout(
+                            process, stdin=stdin, timeout=timeout
+                        )
                     )
 
-                    # Close file handle if using file redirection
+                    # ファイルハンドル処理
                     if isinstance(stdout_handle, IO):
                         try:
                             stdout_handle.close()
                         except (IOError, OSError) as e:
                             logging.warning(f"Error closing stdout: {e}")
 
+                    # Handle case where returncode is None
+                    final_returncode = (
+                        0 if process.returncode is None else process.returncode
+                    )
+
                     return {
                         "error": None,
-                        "stdout": stdout.decode() if stdout else "",
-                        "stderr": stderr.decode() if stderr else "",
+                        "stdout": stdout.decode().strip() if stdout else "",
+                        "stderr": stderr.decode().strip() if stderr else "",
+                        "returncode": final_returncode,
                         "status": process.returncode,
                         "execution_time": time.time() - start_time,
                         "directory": directory,
                     }
 
                 except asyncio.TimeoutError:
-                    # Kill process on timeout
-                    try:
-                        process.kill()
-                        await process.wait()
-                    except ProcessLookupError:
-                        pass
+                    # タイムアウト時のプロセスクリーンアップ
+                    if process and process.returncode is None:
+                        try:
+                            process.kill()
+                            await asyncio.shield(process.wait())
+                        except ProcessLookupError:
+                            # Process already terminated
+                            pass
 
-                # Clean up file handle
-                if isinstance(stdout_handle, IO):
-                    stdout_handle.close()
+                    # ファイルハンドルクリーンアップ
+                    if isinstance(stdout_handle, IO):
+                        stdout_handle.close()
 
-                return {
-                    "error": f"Command timed out after {timeout} seconds",
-                    "status": -1,
-                    "stdout": "",
-                    "stderr": f"Command timed out after {timeout} seconds",
-                    "execution_time": time.time() - start_time,
-                }
+                    return {
+                        "error": f"Command timed out after {timeout} seconds",
+                        "status": -1,
+                        "stdout": "",
+                        "stderr": f"Command timed out after {timeout} seconds",
+                        "execution_time": time.time() - start_time,
+                    }
 
             except Exception as e:  # Exception handler for subprocess
                 if isinstance(stdout_handle, IO):
@@ -309,7 +331,6 @@ class ShellExecutor:
         envs: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
-        processes: List[asyncio.subprocess.Process] = []
         try:
             # Validate all commands before execution
             for cmd in commands:
@@ -319,7 +340,7 @@ class ShellExecutor:
             # Initialize IO variables
             parsed_commands = []
             first_stdin: Optional[bytes] = None
-            last_stdout: Optional[IO[Any]] = None
+            pipeline_stdout: Union[IO[Any], int, None] = None
             first_redirects = None
             last_redirects = None
 
@@ -338,105 +359,58 @@ class ShellExecutor:
                 handles = await self.io_handler.setup_redirects(
                     first_redirects, directory
                 )
-                if handles.get("stdin_data"):
-                    first_stdin = handles["stdin_data"].encode()
+                stdin_data = handles.get("stdin_data")
+                if stdin_data:
+                    first_stdin = (
+                        stdin_data.encode() if isinstance(stdin_data, str) else None
+                    )
 
             if last_redirects:
                 handles = await self.io_handler.setup_redirects(
                     last_redirects, directory
                 )
-                last_stdout = handles.get("stdout")
-
-            # Execute pipeline
-            prev_stdout: Optional[bytes] = first_stdin
-            final_stderr: bytes = b""
-            final_stdout: bytes = b""
-
-            # Execute each command in the pipeline
-            for i, cmd in enumerate(parsed_commands):
-                # Create the shell command
-                shell_cmd = self.preprocessor.create_shell_command(cmd)
-
-                # Apply interactive mode to first command only
-                if i == 0:
-                    shell = self._get_default_shell()
-                    shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
-
-                # Create subprocess with proper IO configuration
-                process = await asyncio.create_subprocess_shell(
-                    shell_cmd,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=(
-                        asyncio.subprocess.PIPE
-                        if i < len(parsed_commands) - 1 or not last_stdout
-                        else last_stdout
-                    ),
-                    stderr=asyncio.subprocess.PIPE,
-                    env={**os.environ, **(envs or {})},
-                    cwd=directory,
+                stdout_value = handles.get("stdout")
+                pipeline_stdout = (
+                    stdout_value if isinstance(stdout_value, (IO, int)) else None
                 )
 
-                try:
-                    # Execute the current command using ProcessManager
-                    shell_cmd = " ".join(map(shlex.quote, parsed_commands[i]))
-                    process = await self.process_manager.create_process(
-                        shell_cmd,
-                        directory,
-                        stdout_handle=(
-                            asyncio.subprocess.PIPE
-                            if i < len(parsed_commands) - 1 or not last_stdout
-                            else last_stdout
-                        ),
+            # Execute pipeline
+            try:
+                stdout, stderr, returncode = (
+                    await self.process_manager.execute_pipeline(
+                        [command[0] for command in parsed_commands],
+                        first_stdin=first_stdin,
+                        last_stdout=pipeline_stdout,
+                        directory=directory,
+                        timeout=timeout,
                         envs=envs,
                     )
-                    stdout, stderr = await self.process_manager.execute_with_timeout(
-                        process,
-                        stdin=prev_stdout.decode() if prev_stdout else None,
-                        timeout=timeout,
-                    )
+                )
 
-                    # Collect stderr and check return code
-                    final_stderr = final_stderr + (
-                        stderr if stderr is not None else b""
-                    )
-                    if process.returncode != 0:
-                        error_msg = stderr.decode("utf-8", errors="replace").strip()
-                        if not error_msg:
-                            error_msg = (
-                                f"Command failed with exit code {process.returncode}"
-                            )
-                        raise ValueError(error_msg)
+                final_output = stdout.decode("utf-8") if stdout else ""
+                final_stderr = stderr.decode("utf-8") if stderr else ""
 
-                    # Pass output to next command or store it
-                    if i == len(parsed_commands) - 1:
-                        if last_stdout and isinstance(last_stdout, IO):
-                            last_stdout.write(stdout.decode("utf-8", errors="replace"))
-                            final_output = ""
-                        else:
-                            final_stdout = stdout if stdout else b""
-                            final_output = final_stdout.decode(
-                                "utf-8", errors="replace"
-                            )
-                    else:
-                        prev_stdout = stdout if stdout else b""
+                return {
+                    "error": None,
+                    "stdout": final_output,
+                    "stderr": final_stderr,
+                    "status": returncode,
+                    "execution_time": time.time() - start_time,
+                    "directory": directory,
+                }
 
-                    processes.append(process)
+            except Exception as e:
+                await self.process_manager.cleanup_processes([])
+                return {
+                    "error": str(e),
+                    "stdout": "",
+                    "stderr": str(e),
+                    "status": -1 if isinstance(e, TimeoutError) else 1,
+                    "execution_time": time.time() - start_time,
+                }
 
-                except asyncio.TimeoutError:
-                    await self.process_manager.cleanup_processes([process])
-                    raise
-                except Exception:
-                    await self.process_manager.cleanup_processes([process])
-                    raise
-
-            return {
-                "error": None,
-                "stdout": final_output,
-                "stderr": final_stderr.decode("utf-8", errors="replace"),
-                "status": processes[-1].returncode if processes else 1,
-                "execution_time": time.time() - start_time,
-                "directory": directory,
-            }
+            finally:
+                await self.io_handler.cleanup_handles({"stdout": pipeline_stdout})
 
         except Exception as e:
             return {
@@ -446,8 +420,3 @@ class ShellExecutor:
                 "status": 1,
                 "execution_time": time.time() - start_time,
             }
-
-        finally:
-            # Cleanup all processes using ProcessManager
-            await self.process_manager.cleanup_processes(processes)
-            await self.io_handler.cleanup_handles({"stdout": last_stdout})

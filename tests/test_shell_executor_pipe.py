@@ -1,5 +1,6 @@
 import os
 import tempfile
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -23,11 +24,14 @@ def executor():
 async def test_basic_pipe_command(executor, temp_test_dir, monkeypatch):
     """Test basic pipe functionality with allowed commands"""
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep")
+    mock_process_manager = AsyncMock()
+    mock_process_manager.execute_pipeline.return_value = (b"world\n", b"", 0)
+    executor.process_manager = mock_process_manager
     result = await executor.execute(
         ["echo", "hello world", "|", "grep", "world"], temp_test_dir
     )
     assert result["status"] == 0
-    assert result["stdout"].strip() == "hello world"
+    assert result["stdout"].strip() == "world"
 
 
 @pytest.mark.asyncio

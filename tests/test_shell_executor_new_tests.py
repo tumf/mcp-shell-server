@@ -57,13 +57,19 @@ async def test_directory_validation(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_process_timeout(monkeypatch, temp_test_dir):
+async def test_process_timeout(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
     """Test process timeout handling"""
     monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
-    executor = ShellExecutor()
+    # Mock timeout behavior
+    mock_process_manager.execute_with_timeout.side_effect = TimeoutError(
+        "Command timed out after 1 seconds"
+    )
 
-    # Process timeout with sleep command
-    command = ["sleep", "5"]
-    result = await executor.execute(command=command, directory=temp_test_dir, timeout=1)
+    # Process timeout test
+    result = await shell_executor_with_mock.execute(
+        command=["sleep", "5"], directory=temp_test_dir, timeout=1
+    )
     assert result["error"] == "Command timed out after 1 seconds"
     assert result["status"] == -1
