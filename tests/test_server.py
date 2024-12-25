@@ -44,7 +44,14 @@ def setup_mock_subprocess(monkeypatch):
     """Set up mock subprocess to avoid interactive shell warnings"""
 
     async def mock_create_subprocess_shell(
-        cmd, stdin=None, stdout=None, stderr=None, env=None, cwd=None
+        cmd,
+        stdin=None,
+        stdout=None,
+        stderr=None,
+        env=None,
+        cwd=None,
+        preexec_fn=None,
+        start_new_session=None,
     ):
         # Return appropriate output based on command
         if "echo" in cmd:
@@ -83,8 +90,9 @@ async def test_list_tools():
 
 
 @pytest.mark.asyncio
-async def test_tool_execution_timeout():
+async def test_tool_execution_timeout(monkeypatch):
     """Test tool execution with timeout"""
+    monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
     with pytest.raises(RuntimeError, match="Command execution timed out"):
         await call_tool(
             "shell_execute",

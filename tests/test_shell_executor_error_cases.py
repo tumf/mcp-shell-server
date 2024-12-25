@@ -42,7 +42,7 @@ async def test_no_allowed_commands_validation(monkeypatch):
         ValueError,
         match="No commands are allowed. Please set ALLOW_COMMANDS environment variable.",
     ):
-        executor._validate_command(["any_command"])
+        executor.validator.validate_command(["any_command"])
 
 
 @pytest.mark.asyncio
@@ -50,7 +50,7 @@ async def test_shell_operator_validation():
     """Test validation of shell operators"""
     executor = ShellExecutor()
 
-    operators = [";" "&&", "||", "|"]
+    operators = [";", "&&", "||", "|"]
     for op in operators:
         # Test shell operator validation
         with pytest.raises(ValueError, match=f"Unexpected shell operator: {op}"):
