@@ -33,11 +33,11 @@ jobs:
 
       - name: Run format checks and typecheck
         run: |
-          make check
+          uv run make check
 
       - name: Run tests with coverage
         run: |
-          make coverage
+          uv run make coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
