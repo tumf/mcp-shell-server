@@ -28,7 +28,7 @@ class ExecuteToolHandler:
 
     def get_allowed_commands(self) -> list[str]:
         """Get the allowed commands"""
-        return self.executor.get_allowed_commands()
+        return self.executor.validator.get_allowed_commands()
 
     def get_tool_description(self) -> Tool:
         """Get the tool description for the execute command"""

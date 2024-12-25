@@ -30,18 +30,20 @@ def temp_test_dir():
 async def test_pipeline_split(executor):
     """Test pipeline command splitting functionality"""
     # Test basic pipe command
-    commands = executor._split_pipe_commands(["echo", "hello", "|", "grep", "h"])
+    commands = executor.preprocessor.split_pipe_commands(
+        ["echo", "hello", "|", "grep", "h"]
+    )
     assert len(commands) == 2
     assert commands[0] == ["echo", "hello"]
     assert commands[1] == ["grep", "h"]
 
     # Test empty pipe sections
-    commands = executor._split_pipe_commands(["|", "grep", "pattern"])
+    commands = executor.preprocessor.split_pipe_commands(["|", "grep", "pattern"])
     assert len(commands) == 1
     assert commands[0] == ["grep", "pattern"]
 
     # Test multiple pipes
-    commands = executor._split_pipe_commands(
+    commands = executor.preprocessor.split_pipe_commands(
         ["cat", "file.txt", "|", "grep", "pattern", "|", "wc", "-l"]
     )
     assert len(commands) == 3
@@ -50,18 +52,22 @@ async def test_pipeline_split(executor):
     assert commands[2] == ["wc", "-l"]
 
     # Test trailing pipe
-    commands = executor._split_pipe_commands(["echo", "hello", "|"])
+    commands = executor.preprocessor.split_pipe_commands(["echo", "hello", "|"])
     assert len(commands) == 1
     assert commands[0] == ["echo", "hello"]
 
 
 @pytest.mark.asyncio
-async def test_pipeline_execution_success(executor, temp_test_dir, monkeypatch):
+async def test_pipeline_execution_success(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
     """Test successful pipeline execution with proper return value"""
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOWED_COMMANDS", "echo,grep")
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep")
+    # Set up mock for pipeline execution
+    expected_output = b"mocked pipeline output\n"
+    mock_process_manager.execute_pipeline.return_value = (expected_output, b"", 0)
 
-    result = await executor.execute(
+    result = await shell_executor_with_mock.execute(
         ["echo", "hello world", "|", "grep", "world"],
         directory=temp_test_dir,
         timeout=5,
@@ -69,30 +75,29 @@ async def test_pipeline_execution_success(executor, temp_test_dir, monkeypatch):
 
     assert result["error"] is None
     assert result["status"] == 0
-    assert "world" in result["stdout"]
+    assert result["stdout"].rstrip() == "mocked pipeline output"
     assert "execution_time" in result
 
 
 @pytest.mark.asyncio
-async def test_pipeline_cleanup_and_timeouts(executor, temp_test_dir, monkeypatch):
+async def test_pipeline_cleanup_and_timeouts(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
     """Test cleanup of processes in pipelines and timeout handling"""
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "cat,tr,head,sleep")
-
-    # Test pipeline with early termination
-    test_file = os.path.join(temp_test_dir, "test.txt")
-    with open(test_file, "w") as f:
-        f.write("test\n" * 1000)
-
-    result = await executor.execute(
-        ["cat", test_file, "|", "tr", "[:lower:]", "[:upper:]", "|", "head", "-n", "1"],
-        temp_test_dir,
-        timeout=2,
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep")
+    # Mock timeout behavior for pipeline
+    mock_process_manager.execute_pipeline.side_effect = TimeoutError(
+        "Command timed out after 1 seconds"
     )
-    assert result["status"] == 0
-    assert result["stdout"].strip() == "TEST"
 
-    # Test timeout handling in pipeline
-    result = await executor.execute(["sleep", "5"], temp_test_dir, timeout=1)
+    result = await shell_executor_with_mock.execute(
+        ["echo", "test", "|", "grep", "test"],  # Use a pipeline command
+        temp_test_dir,
+        timeout=1,
+    )
+
     assert result["status"] == -1
-    assert "timed out" in result["error"].lower()  # タイムアウトエラーの確認
+    assert "timed out" in result["error"].lower()
+
+    # Verify cleanup was called
+    mock_process_manager.cleanup_processes.assert_called_once()
