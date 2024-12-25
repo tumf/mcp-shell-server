@@ -41,6 +41,10 @@ asyncio_mode = "strict"
 testpaths = "tests"
 # Set default event loop scope for async tests 
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "macos: marks tests that should only run on macOS",
+    "slow: marks tests as slow running",
+]
 filterwarnings = [
     "ignore::RuntimeWarning:selectors:",
     "ignore::pytest.PytestUnhandledCoroutineWarning:",
