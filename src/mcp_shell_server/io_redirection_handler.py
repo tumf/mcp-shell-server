@@ -123,10 +123,10 @@ class IORedirectionHandler:
                 if directory and redirects["stdout"]
                 else str(redirects["stdout"])
             )
-            mode = "a" if redirects["stdout_append"] else "w"
+            mode = "a" if redirects.get("stdout_append") else "w"
             try:
                 handles["stdout"] = open(path, mode)
-            except IOError as e:
+            except (IOError, PermissionError) as e:
                 raise ValueError(f"Failed to open output file: {e}") from e
         else:
             handles["stdout"] = asyncio.subprocess.PIPE
