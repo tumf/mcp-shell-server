@@ -1,5 +1,6 @@
 """Tests for the ProcessManager class."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,6 +14,7 @@ def create_mock_process():
     process.returncode = 0
     process.communicate = AsyncMock(return_value=(b"output", b"error"))
     process.wait = AsyncMock(return_value=0)
+    process.terminate = MagicMock()
     process.kill = MagicMock()
     return process
 
@@ -65,8 +67,15 @@ async def test_execute_with_timeout_success(process_manager):
 async def test_execute_with_timeout_timeout(process_manager):
     """Test executing a process that times out."""
     mock_proc = create_mock_process()
-    exc = TimeoutError("Process timed out")
+    exc = asyncio.TimeoutError("Process timed out")
     mock_proc.communicate.side_effect = exc
+    mock_proc.returncode = None  # プロセスがまだ実行中の状態をシミュレート
+
+    # プロセスの終了状態をシミュレート
+    async def set_returncode():
+        mock_proc.returncode = -15  # SIGTERM
+
+    mock_proc.wait.side_effect = set_returncode
 
     with pytest.raises(TimeoutError):
         await process_manager.execute_with_timeout(
@@ -74,7 +83,7 @@ async def test_execute_with_timeout_timeout(process_manager):
             timeout=1,
         )
 
-    mock_proc.kill.assert_called_once()
+    mock_proc.terminate.assert_called_once()
 
 
 @pytest.mark.asyncio

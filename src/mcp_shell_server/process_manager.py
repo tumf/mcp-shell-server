@@ -65,12 +65,13 @@ class ProcessManager:
         process = await self.create_process(
             " ".join(cmd), directory=None, timeout=timeout
         )
+        process.is_running = lambda self=process: self.returncode is None  # type: ignore
         return process
 
-    def start_process(
+    async def start_process(
         self, cmd: List[str], timeout: Optional[int] = None
     ) -> asyncio.subprocess.Process:
-        """Start a new process synchronously.
+        """Start a new process asynchronously.
 
         Args:
             cmd: Command to execute as list of strings
@@ -79,8 +80,8 @@ class ProcessManager:
         Returns:
             Process object
         """
-        process = asyncio.get_event_loop().run_until_complete(
-            self.start_process_async(cmd, timeout)
+        process = await self.create_process(
+            " ".join(cmd), directory=None, timeout=timeout
         )
         process.is_running = lambda self=process: self.returncode is None  # type: ignore
         return process
@@ -186,22 +187,38 @@ class ProcessManager:
         """
         stdin_bytes = stdin.encode() if stdin else None
 
-        async def communicate_with_timeout():
-            try:
-                return await process.communicate(input=stdin_bytes)
-            except asyncio.TimeoutError:
-                process.kill()  # Kill process on timeout
-                raise
-            except Exception as e:
-                try:
-                    await process.wait()
-                except Exception:
-                    pass
-                raise e
+        async def _kill_process():
+            if process.returncode is not None:
+                return
 
-        if timeout:
-            return await asyncio.wait_for(communicate_with_timeout(), timeout=timeout)
-        return await communicate_with_timeout()
+            try:
+                # Try graceful termination first
+                process.terminate()
+                for _ in range(5):  # Wait up to 0.5 seconds
+                    if process.returncode is not None:
+                        return
+                    await asyncio.sleep(0.1)
+
+                # Force kill if still running
+                if process.returncode is None:
+                    process.kill()
+                    await asyncio.wait_for(process.wait(), timeout=1.0)
+            except Exception as e:
+                logging.warning(f"Error killing process: {e}")
+
+        try:
+            if timeout:
+                try:
+                    return await asyncio.wait_for(
+                        process.communicate(input=stdin_bytes), timeout=timeout
+                    )
+                except asyncio.TimeoutError:
+                    await _kill_process()
+                    raise
+            return await process.communicate(input=stdin_bytes)
+        except Exception as e:
+            await _kill_process()
+            raise e
 
     async def execute_pipeline(
         self,
