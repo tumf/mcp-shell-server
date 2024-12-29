@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import signal
 import traceback
 from collections.abc import Sequence
 from typing import Any
@@ -139,13 +140,53 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
 async def main() -> None:
     """Main entry point for the MCP shell server"""
     logger.info(f"Starting MCP shell server v{__version__}")
+    
+    # Setup signal handling
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+    
+    def handle_signal():
+        if not stop_event.is_set():  # Prevent duplicate handling
+            logger.info("Received shutdown signal, starting cleanup...")
+            stop_event.set()
+            
+    # Register signal handlers
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, handle_signal)
+    
     try:
         from mcp.server.stdio import stdio_server
-
+        
         async with stdio_server() as (read_stream, write_stream):
-            await app.run(
-                read_stream, write_stream, app.create_initialization_options()
+            # Run the server until stop_event is set
+            server_task = asyncio.create_task(
+                app.run(read_stream, write_stream, app.create_initialization_options())
             )
+            
+            # Wait for either server completion or stop signal
+            done, pending = await asyncio.wait(
+                [server_task, stop_event.wait()],
+                return_when=asyncio.FIRST_COMPLETED
+            )
+            
+            # Cancel any pending tasks
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                
     except Exception as e:
         logger.error(f"Server error: {str(e)}")
         raise
+    finally:
+        # Cleanup signal handlers
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.remove_signal_handler(sig)
+        
+        # Ensure all processes are terminated
+        if hasattr(tool_handler, "executor") and hasattr(tool_handler.executor, "process_manager"):
+            await tool_handler.executor.process_manager.cleanup_processes()
+            
+        logger.info("Server shutdown complete")

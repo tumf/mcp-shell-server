@@ -92,15 +92,26 @@ class ProcessManager:
         """Clean up processes by killing them if they're still running.
 
         Args:
-            processes: List of processes to clean up
+            processes: Optional list of processes to clean up. If None, clean up all tracked processes
         """
+        if processes is None:
+            processes = list(self._processes)
+
         cleanup_tasks = []
         for process in processes:
             if process.returncode is None:
                 try:
-                    # Force kill immediately as required by tests
-                    process.kill()
-                    cleanup_tasks.append(asyncio.create_task(process.wait()))
+                    # First attempt graceful termination
+                    process.terminate()
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=0.5)
+                    except asyncio.TimeoutError:
+                        # Force kill if termination didn't work
+                        process.kill()
+                        cleanup_tasks.append(asyncio.create_task(process.wait()))
+                except ProcessLookupError:
+                    # Process already terminated
+                    pass
                 except Exception as e:
                     logging.warning(f"Error killing process: {e}")
 
