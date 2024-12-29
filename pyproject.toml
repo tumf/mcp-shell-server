@@ -76,8 +76,10 @@ profile = "black"
 line_length = 88
 
 [tool.mypy]
-show_error_context = false
-warning_code = false
+error_summary = false
+hide_error_codes = true
+disallow_untyped_defs = false
+check_untyped_defs = false
 
 [tool.hatch.version]
 path = "src/mcp_shell_server/version.py"
