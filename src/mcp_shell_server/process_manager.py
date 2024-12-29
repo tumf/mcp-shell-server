@@ -87,7 +87,7 @@ class ProcessManager:
         return process
 
     async def cleanup_processes(
-        self, processes: List[asyncio.subprocess.Process]
+        self, processes: Optional[List[asyncio.subprocess.Process]] = None
     ) -> None:
         """Clean up processes by killing them if they're still running.
 

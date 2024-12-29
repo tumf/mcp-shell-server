@@ -142,6 +142,8 @@ async def test_cleanup_processes(process_manager):
     # Create mock processes with different states
     running_proc = create_mock_process()
     running_proc.returncode = None
+    # Mock wait to simulate timeout
+    running_proc.wait.side_effect = [asyncio.TimeoutError(), None]
 
     completed_proc = create_mock_process()
     completed_proc.returncode = 0
@@ -149,10 +151,9 @@ async def test_cleanup_processes(process_manager):
     # Execute cleanup
     await process_manager.cleanup_processes([running_proc, completed_proc])
 
-    # Verify running process was killed and waited for
-    running_proc.kill.assert_called_once()
-    running_proc.wait.assert_awaited_once()
-
+    # Verify running process was terminated first, then killed
+    running_proc.terminate.assert_called_once()
+    assert running_proc.wait.await_count == 2  # wait called for both terminate and kill
     # Verify completed process was not killed or waited for
     completed_proc.kill.assert_not_called()
     completed_proc.wait.assert_not_called()

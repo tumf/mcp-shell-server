@@ -163,11 +163,21 @@ async def main() -> None:
                 app.run(read_stream, write_stream, app.create_initialization_options())
             )
             
+            # Create task for stop event
+            stop_task = asyncio.create_task(stop_event.wait())
+            
             # Wait for either server completion or stop signal
             done, pending = await asyncio.wait(
-                [server_task, stop_event.wait()],
+                [server_task, stop_task],
                 return_when=asyncio.FIRST_COMPLETED
             )
+            
+            # Check for exceptions in completed tasks
+            for task in done:
+                try:
+                    await task
+                except Exception as e:
+                    raise  # Re-raise the exception
             
             # Cancel any pending tasks
             for task in pending:

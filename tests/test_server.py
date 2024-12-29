@@ -434,3 +434,66 @@ async def test_environment_variables(monkeypatch, temp_test_dir):
         {"command": ["env"], "directory": temp_test_dir},
     )
     assert len(result) == 1
+
+@pytest.mark.asyncio
+async def test_signal_handling(monkeypatch, mocker):
+    """Test signal handling and cleanup during server shutdown"""
+    from mcp_shell_server.server import main
+    
+    # Setup mocks
+    mock_read_stream = mocker.AsyncMock()
+    mock_write_stream = mocker.AsyncMock()
+    mock_cleanup_processes = mocker.AsyncMock()
+    
+    # Mock process manager
+    class MockExecutor:
+        def __init__(self):
+            self.process_manager = mocker.MagicMock()
+            self.process_manager.cleanup_processes = mock_cleanup_processes
+    
+    class MockToolHandler:
+        def __init__(self):
+            self.executor = MockExecutor()
+    
+    # Setup server mocks
+    context_manager = mocker.AsyncMock()
+    context_manager.__aenter__ = mocker.AsyncMock(
+        return_value=(mock_read_stream, mock_write_stream)
+    )
+    context_manager.__aexit__ = mocker.AsyncMock()
+    mock_stdio_server = mocker.Mock(return_value=context_manager)
+    mocker.patch("mcp.server.stdio.stdio_server", mock_stdio_server)
+    
+    # Mock server run to simulate long-running task
+    async def mock_run(*args):
+        # Wait indefinitely or until cancelled
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            pass
+    mocker.patch("mcp_shell_server.server.app.run", side_effect=mock_run)
+    
+    # Mock tool handler
+    tool_handler = MockToolHandler()
+    mocker.patch("mcp_shell_server.server.tool_handler", tool_handler)
+    
+    # Run main in a task so we can simulate signal
+    task = asyncio.create_task(main())
+    
+    # Give the server a moment to start
+    await asyncio.sleep(0.1)
+    
+    # Simulate SIGINT
+    loop = asyncio.get_running_loop()
+    loop.call_soon(lambda: [h() for h in loop._signal_handlers.get(signal.SIGINT, [])])
+    
+    # Wait for main to complete
+    try:
+        await asyncio.wait_for(task, timeout=1.0)
+    except asyncio.TimeoutError:
+        task.cancel()
+        await asyncio.sleep(0.1)
+    
+    # Verify cleanup was called
+    mock_cleanup_processes.assert_called_once()
+    context_manager.__aexit__.assert_called_once()
