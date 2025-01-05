@@ -8,21 +8,21 @@ test:
 	uv run pytest
 
 format:
-	black .
-	isort .
-	ruff check --fix .
+	uv run isort .
+	uv run black .
+	uv run ruff check --fix .
 
 
 lint:
-	black --check .
-	isort --check .
-	ruff check .
+	uv run isort --check .
+	uv run black --check .
+	uv run ruff check .
 
 typecheck:
-	mypy src/mcp_shell_server tests
+	uv run mypy src/mcp_shell_server tests
 
 coverage:
-	pytest --cov=src/mcp_shell_server tests
+	uv run pytest --cov=src/mcp_shell_server tests
 
 # Run all checks required before pushing
 check:  lint typecheck
