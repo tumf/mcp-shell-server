@@ -1,6 +1,9 @@
 .PHONY: test format lint typecheck check
 .DEFAULT_GOAL := all
 
+install:
+	uv pip install --upgrade '.[dev,test]'
+
 test:
 	uv run pytest
 
