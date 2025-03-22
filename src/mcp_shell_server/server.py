@@ -56,6 +56,10 @@ class ExecuteToolHandler:
                         "description": "Maximum execution time in seconds",
                         "minimum": 0,
                     },
+                    "shell_config": {
+                        "type": "string",
+                        "description": "Path to the shell configuration file",
+                    },
                 },
                 "required": ["command", "directory"],
             },
@@ -67,6 +71,7 @@ class ExecuteToolHandler:
         stdin = arguments.get("stdin")
         directory = arguments.get("directory", "/tmp")  # default to /tmp for safety
         timeout = arguments.get("timeout")
+        shell_config = arguments.get("shell_config")
 
         if not command:
             raise ValueError("No command provided")
@@ -84,8 +89,8 @@ class ExecuteToolHandler:
             try:
                 result = await asyncio.wait_for(
                     self.executor.execute(
-                        command, directory, stdin, None
-                    ),  # Pass None for timeout
+                        command, directory, stdin, timeout, shell_config=shell_config
+                    ),
                     timeout=timeout,
                 )
             except asyncio.TimeoutError as e:
