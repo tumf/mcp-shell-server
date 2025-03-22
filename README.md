@@ -183,6 +183,7 @@ pytest
 | stdin     | string     | No       | Input to be passed to the command            |
 | directory | string     | No       | Working directory for command execution       |
 | timeout   | integer    | No       | Maximum execution time in seconds             |
+| shell_config | string  | No       | Path to the shell configuration file          |
 
 ### Response Fields
 

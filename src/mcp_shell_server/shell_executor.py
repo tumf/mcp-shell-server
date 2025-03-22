@@ -71,12 +71,17 @@ class ShellExecutor:
         """
         return self.validator.validate_pipeline(commands)
 
-    def _get_default_shell(self) -> str:
+    def _get_default_shell(self, shell_config: Optional[str] = None) -> str:
         """Get the login shell of the current user"""
         try:
-            return pwd.getpwuid(os.getuid()).pw_shell
+            shell = pwd.getpwuid(os.getuid()).pw_shell
         except (ImportError, KeyError):
-            return os.environ.get("SHELL", "/bin/sh")
+            shell = os.environ.get("SHELL", "/bin/sh")
+
+        if shell_config:
+            shell = f"{shell} --rcfile {shlex.quote(shell_config)}"
+
+        return shell
 
     async def execute(
         self,
@@ -85,6 +90,7 @@ class ShellExecutor:
         stdin: Optional[str] = None,
         timeout: Optional[int] = None,
         envs: Optional[Dict[str, str]] = None,
+        shell_config: Optional[str] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
         process = None  # Initialize process variable
@@ -233,7 +239,7 @@ class ShellExecutor:
                 }
 
             # Execute the command with interactive shell
-            shell = self._get_default_shell()
+            shell = self._get_default_shell(shell_config)
             shell_cmd = self.preprocessor.create_shell_command(cmd)
             shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
 
