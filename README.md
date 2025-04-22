@@ -4,6 +4,8 @@
 
 A secure shell command execution server implementing the Model Context Protocol (MCP). This server allows remote execution of whitelisted shell commands with support for stdin input.
 
+<a href="https://glama.ai/mcp/servers/rt2d4pbn22"><img width="380" height="200" src="https://glama.ai/mcp/servers/rt2d4pbn22/badge" alt="mcp-shell-server MCP server" /></a>
+
 ## Features
 
 * **Secure Command Execution**: Only whitelisted commands can be executed
