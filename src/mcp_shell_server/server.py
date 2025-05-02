@@ -14,7 +14,7 @@ from .version import __version__
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp-shell-server")
 
-app = Server("mcp-shell-server")
+app: Server = Server("mcp-shell-server")
 
 
 class ExecuteToolHandler:
