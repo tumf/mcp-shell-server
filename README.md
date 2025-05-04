@@ -68,6 +68,15 @@ code ~/Library/Application\ Support/Claude/claude_desktop_config.json
 
 #### Installation
 
+### Installing via Smithery
+
+To install Shell Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-shell-server):
+
+```bash
+npx -y @smithery/cli install mcp-shell-server --client claude
+```
+
+### Manual Installation
 ```bash
 pip install mcp-shell-server
 ```
