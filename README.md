@@ -1,6 +1,7 @@
 # MCP Shell Server
 
 [![codecov](https://codecov.io/gh/tumf/mcp-shell-server/branch/main/graph/badge.svg)](https://codecov.io/gh/tumf/mcp-shell-server)
+[![smithery badge](https://smithery.ai/badge/mcp-shell-server)](https://smithery.ai/server/mcp-shell-server)
 
 A secure shell command execution server implementing the Model Context Protocol (MCP). This server allows remote execution of whitelisted shell commands with support for stdin input.
 
@@ -69,6 +70,14 @@ code ~/Library/Application\ Support/Claude/claude_desktop_config.json
 
 ```bash
 pip install mcp-shell-server
+```
+
+### Installing via Smithery
+
+To install Shell Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-shell-server):
+
+```bash
+npx -y @smithery/cli install mcp-shell-server --client claude
 ```
 
 ## Usage
