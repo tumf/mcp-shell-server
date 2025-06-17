@@ -22,7 +22,15 @@ def test_get_allowed_commands(validator, monkeypatch):
     assert set(validator.get_allowed_commands()) == {"cmd1", "cmd2", "cmd3", "cmd4"}
 
 
-def test_is_command_allowed(validator, monkeypatch):
+def test_is_command_allowed_with_patterns(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "allowed_cmd")
+    monkeypatch.setenv("ALLOW_PATTERNS", "^cmd[0-9]+$")
+    
+    assert validator.is_command_allowed("allowed_cmd")
+    assert validator.is_command_allowed("cmd123")
+    assert not validator.is_command_allowed("disallowed_cmd")
+    assert not validator.is_command_allowed("cmdabc")
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "allowed_cmd")
     assert validator.is_command_allowed("allowed_cmd")
