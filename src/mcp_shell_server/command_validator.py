@@ -100,5 +100,5 @@ class CommandValidator:
 
         # Clean and check the first command
         cleaned_cmd = command[0].strip()
-        if cleaned_cmd not in allowed_commands:
+        if not self.is_command_allowed(cleaned_cmd):
             raise ValueError(f"Command not allowed: {cleaned_cmd}")
