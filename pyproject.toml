@@ -19,6 +19,7 @@ mcp-shell-server = "mcp_shell_server:main"
 [project.optional-dependencies]
 test = [
     "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
     "pytest-asyncio>=0.23.0", 
     "pytest-env>=1.1.0",
     "pytest-cov>=6.0.0",
