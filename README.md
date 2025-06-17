@@ -92,7 +92,17 @@ To install Shell Server for Claude Desktop automatically via [Smithery](https://
 npx -y @smithery/cli install mcp-shell-server --client claude
 ```
 
-## Usage
+### Configuring Regex Patterns
+
+You can allow commands using regex patterns by setting the `ALLOW_PATTERNS` environment variable. Patterns should be separated by commas.
+
+Example:
+
+```bash
+ALLOW_PATTERNS="^cmd[0-9]+$,^test.*$"
+```
+
+This configuration allows commands like `cmd123` and `testCommand`.
 
 ### Starting the Server
 
