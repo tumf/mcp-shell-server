@@ -18,32 +18,32 @@ class CommandValidator:
         """
         pass
 
-    def _get_allowed_commands(self) -> set[str]:
+    def get_allowed_commands(self) -> set[str]:
         """Get the set of allowed commands from environment variables"""
         allow_commands = os.environ.get("ALLOW_COMMANDS", "")
         allowed_commands = os.environ.get("ALLOWED_COMMANDS", "")
         commands = allow_commands + "," + allowed_commands
         return {cmd.strip() for cmd in commands.split(",") if cmd.strip()}
 
-    def _get_allowed_patterns(self) -> List[re.Pattern]:
+    def get_allowed_patterns(self) -> List[re.Pattern]:
         """Get the list of allowed regex patterns from environment variables"""
         allow_patterns = os.environ.get("ALLOW_PATTERNS", "")
         patterns = [pattern.strip() for pattern in allow_patterns.split(",") if pattern.strip()]
         return [re.compile(pattern) for pattern in patterns]
         """Get the list of allowed commands from environment variables"""
-        return list(self._get_allowed_commands())
+        return list(self.get_allowed_commands())
 
     def is_command_allowed(self, command: str) -> bool:
         """Check if a command is in the allowed list or matches an allowed pattern"""
         cmd = command.strip()
-        if cmd in self._get_allowed_commands():
+        if cmd in self.get_allowed_commands():
             return True
-        for pattern in self._get_allowed_patterns():
+        for pattern in self.get_allowed_patterns():
             if pattern.match(cmd):
                 return True
         return False
         cmd = command.strip()
-        return cmd in self._get_allowed_commands()
+        return cmd in self.get_allowed_commands()
 
     def validate_no_shell_operators(self, cmd: str) -> None:
         """
@@ -104,7 +104,7 @@ class CommandValidator:
         if not command:
             raise ValueError("Empty command")
 
-        if not self._get_allowed_commands() and not self._get_allowed_patterns():
+        if not self.get_allowed_commands() and not self.get_allowed_patterns():
             raise ValueError(
                 "No commands are allowed. Please set ALLOW_COMMANDS environment variable."
             )
