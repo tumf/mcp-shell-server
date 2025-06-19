@@ -54,7 +54,7 @@ code ~/Library/Application\ Support/Claude/claude_desktop_config.json
       "command": "uv",
       "args": [
         "--directory",
-        ".",
+        "/path/to/your/cloned/repository",
         "run",
         "mcp-shell-server"
       ],

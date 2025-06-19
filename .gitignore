@@ -78,3 +78,4 @@ share/python-wheels/
 MANIFEST
 
 prompt.md
+.aider*
