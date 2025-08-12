@@ -49,7 +49,7 @@ class ExecuteToolHandler:
                     },
                     "directory": {
                         "type": "string",
-                        "description": "Working directory where the command will be executed",
+                        "description": "Absolute path to a working directory where the command will be executed",
                     },
                     "timeout": {
                         "type": "integer",
