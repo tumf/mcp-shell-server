@@ -104,3 +104,11 @@ omit = [
     "src/mcp_shell_server/__init__.py",
     "src/mcp_shell_server/version.py",
 ]
+
+[dependency-groups]
+dev = [
+    "black>=23.3.0",
+    "isort>=5.12.0",
+    "mypy>=1.2.0",
+    "ruff>=0.0.262",
+]

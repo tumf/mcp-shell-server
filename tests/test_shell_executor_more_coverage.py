@@ -1,5 +1,4 @@
 import asyncio
-import io
 import os
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch

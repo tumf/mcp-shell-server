@@ -1,11 +1,9 @@
 """Additional tests for the ProcessManager class to improve coverage."""
 
-import asyncio
-import logging
 import os
 import signal
 from typing import IO
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

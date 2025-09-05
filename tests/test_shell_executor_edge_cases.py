@@ -1,9 +1,7 @@
 """Edge case tests for the ShellExecutor class to improve coverage."""
 
 import os
-import pwd
-from typing import Any, Dict
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -219,8 +217,6 @@ async def test_io_redirection_processing_error(shell_executor):
 @pytest.mark.asyncio
 async def test_setup_redirects_stdout_as_int(shell_executor):
     """Test that setup_redirects returns stdout as int and it's properly handled in create_process."""
-    import asyncio
-    from typing import IO
     from unittest.mock import AsyncMock
 
     # Create a mock process
