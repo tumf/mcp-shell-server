@@ -232,10 +232,10 @@ class ShellExecutor:
                     "execution_time": time.time() - start_time,
                 }
 
-            # Execute the command with interactive shell
+            # Execute the command with shell
             shell = self._get_default_shell()
             shell_cmd = self.preprocessor.create_shell_command(cmd)
-            shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
+            shell_cmd = f"{shell} -c {shlex.quote(shell_cmd)}"
 
             process = await self.process_manager.create_process(
                 shell_cmd, directory, stdout_handle=stdout_handle, envs=envs
