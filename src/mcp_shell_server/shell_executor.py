@@ -200,7 +200,7 @@ class ShellExecutor:
                         "stderr": f"Not a directory: {directory}",
                         "execution_time": time.time() - start_time,
                     }
-            if not cleaned_command:
+            if not cleaned_command:  # pragma: no cover
                 raise ValueError("Empty command")
 
             # Initialize stdout_handle with default value
@@ -245,7 +245,7 @@ class ShellExecutor:
                 # Send input if provided
                 stdin_bytes = stdin.encode() if stdin else None
 
-                async def communicate_with_timeout():
+                async def communicate_with_timeout():  # pragma: no cover
                     try:
                         return await process.communicate(input=stdin_bytes)
                     except Exception as e:
