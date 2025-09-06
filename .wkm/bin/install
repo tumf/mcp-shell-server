@@ -1,0 +1,34 @@
+#!/bin/sh
+set -e
+
+# This installer sets the repository-local git hooks path to .githooks
+# No options are accepted — per project policy this script will not overwrite
+# an existing core.hooksPath set to a different value.
+
+# Ensure we are inside a git repository
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "Error: not a git repository" >&2
+  exit 1
+fi
+
+HOOKS_DIR='.githooks'
+mkdir -p "$HOOKS_DIR"
+
+CURRENT=$(git config --local --get core.hooksPath || true)
+if [ -n "$CURRENT" ] && [ "$CURRENT" != "$HOOKS_DIR" ]; then
+  echo "core.hooksPath is already set to: $CURRENT" >&2
+  echo "To change it, run: git config --local core.hooksPath $HOOKS_DIR" >&2
+  exit 1
+fi
+
+git config --local core.hooksPath "$HOOKS_DIR"
+
+if [ -f "$HOOKS_DIR/pre-commit" ]; then
+  chmod +x "$HOOKS_DIR/pre-commit" || true
+  echo "Enabled pre-commit hook at $HOOKS_DIR/pre-commit"
+else
+  echo "Warning: $HOOKS_DIR/pre-commit does not exist yet. Create it and run this script again."
+fi
+
+echo "core.hooksPath=$(git config --local --get core.hooksPath)"
+exit 0

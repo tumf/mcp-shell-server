@@ -16,7 +16,8 @@ class CommandValidator:
         """
         Initialize the validator.
         """
-        pass
+        # No state; environment variables are read on demand
+        return None
 
     def _get_allowed_commands(self) -> set[str]:
         """Get the set of allowed commands from environment variables"""
@@ -32,7 +33,9 @@ class CommandValidator:
             pattern.strip() for pattern in allow_patterns.split(",") if pattern.strip()
         ]
         return [re.compile(pattern) for pattern in patterns]
-        """Get the list of allowed commands from environment variables"""
+
+    def get_allowed_commands(self) -> list[str]:
+        """Public API: return list form of allowed commands"""
         return list(self._get_allowed_commands())
 
     def is_command_allowed(self, command: str) -> bool:
@@ -44,8 +47,6 @@ class CommandValidator:
             if pattern.match(cmd):
                 return True
         return False
-        cmd = command.strip()
-        return cmd in self._get_allowed_commands()
 
     def validate_no_shell_operators(self, cmd: str) -> None:
         """
