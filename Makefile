@@ -16,7 +16,7 @@ lint:
 	ruff check .
 
 typecheck:
-	mypy src/mcp_shell_server tests
+	mypy --install-types --non-interactive src/mcp_shell_server tests
 
 coverage:
 	pytest --cov=src/mcp_shell_server --cov-report=xml --cov-report=term-missing tests
