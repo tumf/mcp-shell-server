@@ -1,0 +1,30 @@
+#!/bin/sh
+set -e
+
+echo "[pre-commit] Running checks (prefer uv)..."
+if command -v uv >/dev/null 2>&1; then
+  echo "[pre-commit] using uv to run make check"
+  uv run make check || { echo "[pre-commit] uv run make check failed"; exit 1; }
+else
+  echo "[pre-commit] uv not found; falling back to make check"
+  if command -v make >/dev/null 2>&1; then
+    make check || { echo "[pre-commit] make check failed"; exit 1; }
+  else
+    echo "[pre-commit] neither uv nor make available to run checks"; exit 1
+  fi
+fi
+
+echo "[pre-commit] Running coverage (prefer uv)..."
+if command -v uv >/dev/null 2>&1; then
+  echo "[pre-commit] using uv to run make coverage"
+  uv run make coverage || { echo "[pre-commit] uv run make coverage failed"; exit 1; }
+else
+  echo "[pre-commit] uv not found; falling back to make coverage"
+  if command -v make >/dev/null 2>&1; then
+    make coverage || { echo "[pre-commit] make coverage failed"; exit 1; }
+  else
+    echo "[pre-commit] neither uv nor make available to run coverage"; exit 1
+  fi
+fi
+
+exit 0

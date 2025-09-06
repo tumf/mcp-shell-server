@@ -16,6 +16,7 @@ lint:
 	ruff check .
 
 typecheck:
+	uv sync --group dev --extra test
 	mypy src/mcp_shell_server tests
 
 coverage:
@@ -25,3 +26,8 @@ coverage:
 check:  lint typecheck
 fix: check format
 all: format check coverage
+
+# Install git hooks for local development
+.PHONY: install-pre-commit
+install-pre-commit:
+	@.wkm/bin/install
