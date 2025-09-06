@@ -43,7 +43,7 @@ async def test_zombie_process_cleanup(process_manager):
     process = await process_manager.start_process(cmd)
 
     # Wait for the background process to finish
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.1)  # Reduced from 1s for test performance
 
     # Get process status
     status = get_process_status(process.pid)

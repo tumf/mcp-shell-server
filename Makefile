@@ -7,6 +7,12 @@ install:
 test:
 	uv run pytest
 
+test-parallel:
+	uv run pytest -n auto
+
+test-fast:
+	uv run pytest -n auto -m "not slow"
+
 format:
 	uv run isort .
 	uv run black .

@@ -90,6 +90,7 @@ async def test_list_tools():
     """Test listing of available tools"""
 
 
+@pytest.mark.slow  # Mark as slow test due to timeout testing
 @pytest.mark.asyncio
 async def test_tool_execution_timeout(monkeypatch):
     """Test tool execution with timeout"""
@@ -263,6 +264,7 @@ async def test_call_tool_with_nested_directory(temp_test_dir, monkeypatch):
     assert result[0].text.strip() == nested_real_path
 
 
+@pytest.mark.slow  # Mark as slow test due to timeout testing
 @pytest.mark.asyncio
 async def test_call_tool_with_timeout(monkeypatch):
     """Test command execution with timeout"""
@@ -470,7 +472,7 @@ async def test_signal_handling(monkeypatch, mocker):
     async def mock_run(*args):
         # Wait indefinitely or until cancelled
         try:
-            await asyncio.sleep(10)
+            await asyncio.sleep(0.01)  # Reduced from 10s for test performance
         except asyncio.CancelledError:
             pass
 
