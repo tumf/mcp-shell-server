@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+echo "[pre-commit] Running checks: uv run make check"
+if command -v uv >/dev/null 2>&1; then
+  uv run make check || { echo "[pre-commit] uv run make check failed"; exit 1; }
+else
+  echo "[pre-commit] command uv not found. Falling back to make check (if available)."
+  if command -v make >/dev/null 2>&1; then
+    make check || { echo "[pre-commit] make check failed"; exit 1; }
+  else
+    echo "[pre-commit] neither uv nor make are available; cannot run checks"; exit 1
+  fi
+fi
+
+exit 0

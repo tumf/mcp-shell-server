@@ -25,3 +25,8 @@ coverage:
 check:  lint typecheck
 fix: check format
 all: format check coverage
+
+# Install git hooks for local development
+.PHONY: install-pre-commit
+install-pre-commit:
+	@.wkm/bin/install
