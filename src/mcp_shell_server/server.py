@@ -44,7 +44,7 @@ class ExecuteToolHandler:
         """Get the tool description for the execute command"""
         return Tool(
             name=self.name,
-            description=f"{self.description}\nAllowed commands: {', '.join(self.get_allowed_commands())}",
+            description=f"{self.description}\nAllowed commands: {allowed_commands}\nAllowed patterns: {allowed_patterns}",
             inputSchema={
                 "type": "object",
                 "properties": {
