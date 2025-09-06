@@ -1,12 +1,16 @@
 .PHONY: test format lint typecheck check install-pre-commit
 .DEFAULT_GOAL := all
 
+install:
+	uv pip install --upgrade '.[dev,test]'
+
 test:
 	uv run pytest
 
 format:
-	uv run black .
 	uv run isort .
+	uv run black .
+	uv run mypy --install-types --non-interactive src/mcp_shell_server tests
 	uv run ruff check --fix .
 
 
