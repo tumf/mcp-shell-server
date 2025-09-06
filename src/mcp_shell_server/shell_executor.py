@@ -200,7 +200,7 @@ class ShellExecutor:
                         "stderr": f"Not a directory: {directory}",
                         "execution_time": time.time() - start_time,
                     }
-            if not cleaned_command:  # pragma: no cover
+            if not cleaned_command:
                 raise ValueError("Empty command")
 
             # Initialize stdout_handle with default value
@@ -232,10 +232,10 @@ class ShellExecutor:
                     "execution_time": time.time() - start_time,
                 }
 
-            # Execute the command with shell
+            # Execute the command with interactive shell
             shell = self._get_default_shell()
             shell_cmd = self.preprocessor.create_shell_command(cmd)
-            shell_cmd = f"{shell} -c {shlex.quote(shell_cmd)}"
+            shell_cmd = f"{shell} -i -c {shlex.quote(shell_cmd)}"
 
             process = await self.process_manager.create_process(
                 shell_cmd, directory, stdout_handle=stdout_handle, envs=envs
@@ -245,7 +245,7 @@ class ShellExecutor:
                 # Send input if provided
                 stdin_bytes = stdin.encode() if stdin else None
 
-                async def communicate_with_timeout():  # pragma: no cover
+                async def communicate_with_timeout():
                     try:
                         return await process.communicate(input=stdin_bytes)
                     except Exception as e:
