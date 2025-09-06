@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := all
 
 test:
-	uv run pytest
+	pytest
 
 format:
 	black .
@@ -19,7 +19,7 @@ typecheck:
 	mypy src/mcp_shell_server tests
 
 coverage:
-	pytest --cov=src/mcp_shell_server tests
+	pytest --cov=src/mcp_shell_server --cov-report=xml --cov-report=term-missing tests
 
 # Run all checks required before pushing
 check:  lint typecheck
