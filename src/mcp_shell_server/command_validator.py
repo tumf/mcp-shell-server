@@ -28,7 +28,9 @@ class CommandValidator:
     def _get_allowed_patterns(self) -> List[re.Pattern]:
         """Get the list of allowed regex patterns from environment variables"""
         allow_patterns = os.environ.get("ALLOW_PATTERNS", "")
-        patterns = [pattern.strip() for pattern in allow_patterns.split(",") if pattern.strip()]
+        patterns = [
+            pattern.strip() for pattern in allow_patterns.split(",") if pattern.strip()
+        ]
         return [re.compile(pattern) for pattern in patterns]
         """Get the list of allowed commands from environment variables"""
         return list(self._get_allowed_commands())

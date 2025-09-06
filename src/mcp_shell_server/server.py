@@ -32,12 +32,15 @@ class ExecuteToolHandler:
 
     def get_allowed_patterns(self) -> list[str]:
         """Get the allowed regex patterns"""
-        return [pattern.pattern for pattern in self.executor.validator._get_allowed_patterns()]
+        return [
+            pattern.pattern
+            for pattern in self.executor.validator._get_allowed_patterns()
+        ]
 
     def get_tool_description(self) -> Tool:
         """Get the tool description for the execute command"""
-        allowed_commands = ', '.join(self.get_allowed_commands())
-        allowed_patterns = ', '.join(self.get_allowed_patterns())
+        allowed_commands = ", ".join(self.get_allowed_commands())
+        allowed_patterns = ", ".join(self.get_allowed_patterns())
         description = (
             f"{self.description}\n"
             f"Allowed commands: {allowed_commands}\n"

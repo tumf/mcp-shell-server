@@ -26,7 +26,7 @@ def test_is_command_allowed_with_patterns(validator, monkeypatch):
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "allowed_cmd")
     monkeypatch.setenv("ALLOW_PATTERNS", "^cmd[0-9]+$")
-    
+
     assert validator.is_command_allowed("allowed_cmd")
     assert validator.is_command_allowed("cmd123")
     assert not validator.is_command_allowed("disallowed_cmd")
