@@ -78,3 +78,5 @@ share/python-wheels/
 MANIFEST
 
 prompt.md
+# Ignore serena cache
+.serena/cache/
