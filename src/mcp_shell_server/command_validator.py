@@ -4,7 +4,7 @@ Provides validation for shell commands and ensures they are allowed to be execut
 
 import os
 import re
-from typing import Dict, List, Set
+from typing import Dict, List
 
 
 class CommandValidator:
