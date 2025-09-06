@@ -1,10 +1,13 @@
-.PHONY: test format lint typecheck check install-pre-commit
+.PHONY: test test-all test-parallel test-fast format lint typecheck check install-pre-commit
 .DEFAULT_GOAL := all
 
 install:
 	uv pip install --upgrade '.[dev,test]'
 
 test:
+	uv run pytest -n auto -m "not slow"
+
+test-all:
 	uv run pytest
 
 test-parallel:

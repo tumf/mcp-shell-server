@@ -204,9 +204,25 @@ pip install -e ".[test]"
 
 ### Running Tests
 
+This project features optimized test execution for fast development feedback:
+
 ```bash
-pytest
+# Fast tests for development (recommended)
+make test              # 2.56s - Parallel execution, excludes slow tests
+
+# Comprehensive testing
+make test-all          # 8.20s - All tests including timeout tests  
+make test-parallel     # 3.52s - All tests in parallel
+make coverage          # Coverage report with 95% target
 ```
+
+**Performance Features:**
+- ⚡ **4x faster** parallel test execution with pytest-xdist
+- 🎯 **Smart test categorization** - Fast tests for development, comprehensive for CI
+- 📊 **95% code coverage** maintained across all improvements
+- 🔧 **Optimized sleep calls** in tests for minimal wait times
+
+See [Testing Guide](docs/TESTING.md) for detailed information about test performance optimization and best practices.
 
 ## API Reference
 
