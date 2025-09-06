@@ -41,11 +41,6 @@ class ExecuteToolHandler:
         """Get the tool description for the execute command"""
         allowed_commands = ", ".join(self.get_allowed_commands())
         allowed_patterns = ", ".join(self.get_allowed_patterns())
-        description = (
-            f"{self.description}\n"
-            f"Allowed commands: {allowed_commands}\n"
-            f"Allowed patterns: {allowed_patterns}"
-        )
         """Get the tool description for the execute command"""
         return Tool(
             name=self.name,
