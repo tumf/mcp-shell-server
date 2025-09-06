@@ -54,7 +54,7 @@ code ~/Library/Application\ Support/Claude/claude_desktop_config.json
       "command": "uv",
       "args": [
         "--directory",
-        ".",
+        "/path/to/your/cloned/repository",
         "run",
         "mcp-shell-server"
       ],
@@ -108,6 +108,18 @@ ALLOW_COMMANDS="ls,cat,echo"          # Basic format
 ALLOWED_COMMANDS="ls ,echo, cat"      # With spaces (using alias)
 ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
 ```
+
+### Configuring Regex Patterns
+
+You can allow commands using regex patterns by setting the `ALLOW_PATTERNS` environment variable. Patterns should be separated by commas.
+
+Example:
+
+```bash
+ALLOW_PATTERNS="^cmd[0-9]+$,^test.*$"
+```
+
+This configuration allows commands like `cmd123` and `testCommand`.
 
 ### Request Format
 

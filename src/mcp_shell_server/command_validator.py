@@ -2,8 +2,10 @@
 Provides validation for shell commands and ensures they are allowed to be executed.
 """
 
+import logging
 import os
-from typing import Dict, List
+import re
+from typing import Dict, List, Optional
 
 
 class CommandValidator:
@@ -15,7 +17,8 @@ class CommandValidator:
         """
         Initialize the validator.
         """
-        pass
+        self._compiled_patterns: Optional[List[re.Pattern]] = None
+        self._pattern_cache_initialized = False
 
     def _get_allowed_commands(self) -> set[str]:
         """Get the set of allowed commands from environment variables"""
@@ -28,10 +31,21 @@ class CommandValidator:
         """Get the list of allowed commands from environment variables"""
         return list(self._get_allowed_commands())
 
+    def get_allowed_patterns(self) -> List[re.Pattern]:
+        """Get the list of allowed regex patterns from environment variables with caching"""
+        if not self._pattern_cache_initialized:
+            self._initialize_pattern_cache()
+        return self._compiled_patterns or []
+
     def is_command_allowed(self, command: str) -> bool:
-        """Check if a command is in the allowed list"""
+        """Check if a command is in the allowed list or matches an allowed pattern"""
         cmd = command.strip()
-        return cmd in self._get_allowed_commands()
+        if cmd in self._get_allowed_commands():
+            return True
+        for pattern in self.get_allowed_patterns():
+            if pattern.match(cmd):
+                return True
+        return False
 
     def validate_no_shell_operators(self, cmd: str) -> None:
         """
@@ -79,6 +93,26 @@ class CommandValidator:
 
         return {}
 
+    def _initialize_pattern_cache(self) -> None:
+        """Initialize the regex pattern cache with error handling"""
+        if self._pattern_cache_initialized:
+            return
+
+        allow_patterns = os.environ.get("ALLOW_PATTERNS", "")
+        patterns = [pattern.strip() for pattern in allow_patterns.split(",") if pattern.strip()]
+
+        compiled_patterns = []
+        for pattern in patterns:
+            try:
+                compiled_pattern = re.compile(pattern)
+                compiled_patterns.append(compiled_pattern)
+            except re.error as e:
+                logging.warning(f"Invalid regex pattern '{pattern}': {e}. Skipping.")
+                continue
+
+        self._compiled_patterns = compiled_patterns
+        self._pattern_cache_initialized = True
+
     def validate_command(self, command: List[str]) -> None:
         """
         Validate if the command is allowed to be executed.
@@ -92,13 +126,12 @@ class CommandValidator:
         if not command:
             raise ValueError("Empty command")
 
-        allowed_commands = self._get_allowed_commands()
-        if not allowed_commands:
+        if not self._get_allowed_commands() and not self.get_allowed_patterns():
             raise ValueError(
                 "No commands are allowed. Please set ALLOW_COMMANDS environment variable."
             )
 
         # Clean and check the first command
         cleaned_cmd = command[0].strip()
-        if cleaned_cmd not in allowed_commands:
+        if not self.is_command_allowed(cleaned_cmd):
             raise ValueError(f"Command not allowed: {cleaned_cmd}")
