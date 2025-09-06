@@ -31,11 +31,21 @@ class ExecuteToolHandler:
         """Get the allowed commands"""
         return self.executor.validator.get_allowed_commands()
 
+    def get_allowed_patterns(self) -> list[str]:
+        """Get the allowed regex patterns"""
+        return [
+            pattern.pattern
+            for pattern in self.executor.validator._get_allowed_patterns()
+        ]
+
     def get_tool_description(self) -> Tool:
+        """Get the tool description for the execute command"""
+        allowed_commands = ", ".join(self.get_allowed_commands())
+        allowed_patterns = ", ".join(self.get_allowed_patterns())
         """Get the tool description for the execute command"""
         return Tool(
             name=self.name,
-            description=f"{self.description}\nAllowed commands: {', '.join(self.get_allowed_commands())}",
+            description=f"{self.description}\nAllowed commands: {allowed_commands}\nAllowed patterns: {allowed_patterns}",
             inputSchema={
                 "type": "object",
                 "properties": {
