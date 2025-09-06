@@ -30,17 +30,7 @@ class ExecuteToolHandler:
         """Get the allowed commands"""
         return self.executor.validator.get_allowed_commands()
 
-    def get_allowed_patterns(self) -> list[str]:
-        """Get the allowed regex patterns"""
-        return [pattern.pattern for pattern in self.executor.validator.get_allowed_patterns()]
-
     def get_tool_description(self) -> Tool:
-        """Get the tool description for the execute command"""
-        allowed_commands = ', '.join(self.get_allowed_commands())
-        allowed_patterns = ', '.join(self.get_allowed_patterns())
-        description = f"{self.description}\n"
-        if allowed_commands != '': description += f"Allowed commands: {allowed_commands}\n"
-        if allowed_patterns != '': description += f"Allowed patterns: {allowed_patterns}"
         """Get the tool description for the execute command"""
         return Tool(
             name=self.name,
@@ -59,7 +49,7 @@ class ExecuteToolHandler:
                     },
                     "directory": {
                         "type": "string",
-                        "description": "Working directory where the command will be executed",
+                        "description": "Absolute path to a working directory where the command will be executed",
                     },
                     "timeout": {
                         "type": "integer",
@@ -92,11 +82,14 @@ class ExecuteToolHandler:
         try:
             # Handle execution with timeout
             try:
+                # Add small buffer to timeout for CI scheduling delays if timeout is specified
+                actual_timeout = timeout + 0.5 if timeout is not None else None
+
                 result = await asyncio.wait_for(
                     self.executor.execute(
                         command, directory, stdin, None
                     ),  # Pass None for timeout
-                    timeout=timeout,
+                    timeout=actual_timeout,
                 )
             except asyncio.TimeoutError as e:
                 raise ValueError("Command execution timed out") from e
