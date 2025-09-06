@@ -6,7 +6,7 @@ authors = [
 ]
 dependencies = [
     "asyncio>=3.4.3",
-    "mcp @ git+https://github.com/tumf/mcp-python-sdk.git@fix/handle-cancelled-notifications",
+    "mcp>=1.1.2",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -47,8 +47,6 @@ markers = [
 ]
 filterwarnings = [
     "ignore::RuntimeWarning:selectors:",
-    "ignore::pytest.PytestUnhandledCoroutineWarning:",
-    "ignore::pytest.PytestUnraisableExceptionWarning:",
     "ignore::DeprecationWarning:pytest_asyncio.plugin:",
 ]
 
@@ -111,4 +109,12 @@ exclude_lines = [
 omit = [
     "src/mcp_shell_server/__init__.py",
     "src/mcp_shell_server/version.py",
+]
+
+[dependency-groups]
+dev = [
+    "black>=23.3.0",
+    "isort>=5.12.0",
+    "mypy>=1.2.0",
+    "ruff>=0.0.262",
 ]

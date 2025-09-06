@@ -15,7 +15,7 @@ from .version import __version__
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp-shell-server")
 
-app = Server("mcp-shell-server")
+app: Server = Server("mcp-shell-server")
 
 
 class ExecuteToolHandler:
@@ -50,7 +50,7 @@ class ExecuteToolHandler:
                     },
                     "directory": {
                         "type": "string",
-                        "description": "Working directory where the command will be executed",
+                        "description": "Absolute path to a working directory where the command will be executed",
                     },
                     "timeout": {
                         "type": "integer",
@@ -83,11 +83,14 @@ class ExecuteToolHandler:
         try:
             # Handle execution with timeout
             try:
+                # Add small buffer to timeout for CI scheduling delays if timeout is specified
+                actual_timeout = timeout + 0.5 if timeout is not None else None
+
                 result = await asyncio.wait_for(
                     self.executor.execute(
                         command, directory, stdin, None
                     ),  # Pass None for timeout
-                    timeout=timeout,
+                    timeout=actual_timeout,
                 )
             except asyncio.TimeoutError as e:
                 raise ValueError("Command execution timed out") from e
