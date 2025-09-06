@@ -16,6 +16,7 @@ lint:
 	ruff check .
 
 typecheck:
+	uv sync --group dev --extra test
 	mypy src/mcp_shell_server tests
 
 coverage:
