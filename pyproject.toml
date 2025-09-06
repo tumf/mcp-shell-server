@@ -49,6 +49,8 @@ markers = [
 filterwarnings = [
     "ignore::RuntimeWarning:selectors:",
     "ignore::DeprecationWarning:pytest_asyncio.plugin:",
+    "ignore::RuntimeWarning:asyncio:",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
 
 [tool.ruff]

@@ -320,7 +320,11 @@ class ShellExecutor:
 
         finally:
             if process and process.returncode is None:
-                process.kill()
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    # Process already terminated
+                    pass
                 await process.wait()
 
     async def _execute_pipeline(

@@ -60,10 +60,10 @@ async def test_execute_timeout_with_stdout_handle_closed(monkeypatch, temp_test_
         mock_process.returncode = None
 
         # Mock kill to raise ProcessLookupError to cover line 294
-        async def kill_side_effect():
+        def kill_side_effect():
             raise ProcessLookupError("Process not found")
 
-        mock_process.kill = AsyncMock(side_effect=kill_side_effect)
+        mock_process.kill = MagicMock(side_effect=kill_side_effect)
         mock_process.wait = AsyncMock()
         mock_process_manager.create_process = AsyncMock(return_value=mock_process)
 
@@ -113,6 +113,10 @@ async def test_execute_generic_exception_closes_stdout_handle(
         # Mock process creation
         mock_process = AsyncMock()
         mock_process.returncode = None
+
+        # Mock kill to avoid AsyncMock warnings
+        mock_process.kill = MagicMock()
+        mock_process.wait = AsyncMock()
         mock_process_manager.create_process = AsyncMock(return_value=mock_process)
 
         # Mock execute_with_timeout to raise RuntimeError
