@@ -17,6 +17,11 @@ logger = logging.getLogger("mcp-shell-server")
 
 app: Server = Server("mcp-shell-server")
 
+IGNORED_STDERR_SUBSTRINGS = (
+    "cannot set terminal process group",
+    "no job control in this shell",
+)
+
 
 class ExecuteToolHandler:
     """Handler for shell command execution"""
@@ -112,10 +117,20 @@ class ExecuteToolHandler:
             if result.get("stdout"):
                 content.append(TextContent(type="text", text=result["stdout"]))
 
-            # Add stderr if present (filter out specific messages)
+            # Add stderr if present, excluding known non-actionable shell warnings.
             stderr = result.get("stderr")
-            if stderr and "cannot set terminal process group" not in stderr:
-                content.append(TextContent(type="text", text=stderr))
+            if stderr:
+                filtered_stderr_lines = [
+                    line
+                    for line in stderr.splitlines()
+                    if not any(
+                        ignored_substring in line
+                        for ignored_substring in IGNORED_STDERR_SUBSTRINGS
+                    )
+                ]
+                filtered_stderr = "\n".join(filtered_stderr_lines).strip()
+                if filtered_stderr:
+                    content.append(TextContent(type="text", text=filtered_stderr))
 
         except asyncio.TimeoutError as e:
             raise ValueError(f"Command timed out after {timeout} seconds") from e

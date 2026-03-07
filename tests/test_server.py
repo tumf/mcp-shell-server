@@ -340,6 +340,58 @@ async def test_call_tool_with_stderr(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_call_tool_filters_known_shell_warnings(monkeypatch):
+    """Known shell startup warnings should be filtered from stderr output."""
+
+    async def mock_create_subprocess_shell(
+        cmd, stdin=None, stdout=None, stderr=None, env=None, cwd=None
+    ):
+        return MockProcess(
+            stdout=b"",
+            stderr=(
+                b"bash: cannot set terminal process group (1234): Inappropriate ioctl for device\n"
+                b"bash: no job control in this shell\n"
+            ),
+            returncode=0,
+        )
+
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_shell", mock_create_subprocess_shell
+    )
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+
+    result = await call_tool("shell_execute", {"command": ["echo", "hello"]})
+    assert len(result) == 0
+
+
+@pytest.mark.asyncio
+async def test_call_tool_filters_only_warning_lines(monkeypatch):
+    """Warning lines are removed while non-warning stderr content is preserved."""
+
+    async def mock_create_subprocess_shell(
+        cmd, stdin=None, stdout=None, stderr=None, env=None, cwd=None
+    ):
+        return MockProcess(
+            stdout=b"",
+            stderr=(
+                b"bash: cannot set terminal process group (1234): Inappropriate ioctl for device\n"
+                b"real error line\n"
+            ),
+            returncode=1,
+        )
+
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_shell", mock_create_subprocess_shell
+    )
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+
+    result = await call_tool("shell_execute", {"command": ["echo", "hello"]})
+    assert len(result) == 1
+    stderr_content = next((c for c in result if c.text == "real error line"), None)
+    assert stderr_content is not None
+
+
+@pytest.mark.asyncio
 async def test_main_server(mocker):
     """Test the main server function"""
     # Mock the stdio_server
