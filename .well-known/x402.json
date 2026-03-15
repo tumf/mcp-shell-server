@@ -1,0 +1,18 @@
+{
+  "name": "tumf/mcp-shell-server",
+  "description": "A secure shell command execution server implementing the Model Context Protocol (MCP)",
+  "accepts": [
+    {
+      "network": "eip155:8453",
+      "asset": "USDC",
+      "address": "YOUR_WALLET_ADDRESS"
+    }
+  ],
+  "resources": [
+    {
+      "path": "/execute_command",
+      "price": "0.01",
+      "description": "Pay-per-call access to execute_command"
+    }
+  ]
+}
