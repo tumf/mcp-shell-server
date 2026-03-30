@@ -11,6 +11,10 @@ A secure shell command execution server implementing the Model Context Protocol 
 
 <a href="https://glama.ai/mcp/servers/rt2d4pbn22"><img width="380" height="200" src="https://glama.ai/mcp/servers/rt2d4pbn22/badge" alt="mcp-shell-server MCP server" /></a>
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/tumf-mcp-shell-server).
+
 ## Features
 
 * **Secure Command Execution**: Only whitelisted commands can be executed
