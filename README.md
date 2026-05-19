@@ -43,6 +43,24 @@ code ~/Library/Application\ Support/Claude/claude_desktop_config.json
 }
 ```
 
+Optional local guardrail with [Armorer Guard](https://github.com/ArmorerLabs/Armorer-Guard):
+
+```json
+{
+  "mcpServers": {
+    "shell": {
+      "command": "armorer-guard",
+      "args": ["mcp-proxy", "--", "uvx", "mcp-shell-server"],
+      "env": {
+        "ALLOW_COMMANDS": "ls,cat,pwd,grep,wc,touch,find"
+      }
+    }
+  }
+}
+```
+
+This wraps the same shell MCP server with a local proxy that inspects command-execution tool arguments for prompt injection, credential leakage, exfiltration risk, and dangerous actions before forwarding safe calls.
+
 ### Local version
 
 #### Configuration
