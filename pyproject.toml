@@ -6,6 +6,7 @@ authors = [
 ]
 dependencies = [
     "asyncio>=3.4.3",
+    "h11>=0.16.0",
     "mcp>=1.1.2",
 ]
 requires-python = ">=3.11"
