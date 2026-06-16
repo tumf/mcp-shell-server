@@ -139,7 +139,7 @@ async def test_pipeline_rejects_metacharacter_injected_command(
     )
 
     assert result["status"] == 1
-    assert "Unsafe command name" in result["error"]
+    assert "Unexpected shell operator" in result["error"]
     mock_process_manager.execute_pipeline.assert_not_awaited()
 
 
@@ -171,5 +171,5 @@ async def test_pipeline_metacharacter_injection_rejected_without_side_effect(
     )
 
     assert result["status"] == 1
-    assert "Unsafe command name" in result["error"]
+    assert "Unexpected shell operator" in result["error"]
     assert not os.path.exists(marker)

@@ -77,12 +77,14 @@ async def test_create_process_uses_minimal_child_environment(
     mock_proc = create_mock_process()
 
     with patch(
-        "mcp_shell_server.process_manager.asyncio.create_subprocess_shell",
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
         return_value=mock_proc,
     ) as mock_create:
         await process_manager.create_process("echo 'test'", directory="/tmp")
 
+    mock_create.assert_called_once()
+    assert mock_create.call_args.args == ("echo", "test")
     child_env = mock_create.call_args.kwargs["env"]
     assert child_env["PATH"] == os.environ.get("PATH", os.defpath)
     assert "SECRET_TOKEN" not in child_env
@@ -98,7 +100,7 @@ async def test_create_process_filters_envs_by_allowlist(process_manager, monkeyp
     mock_proc = create_mock_process()
 
     with patch(
-        "mcp_shell_server.process_manager.asyncio.create_subprocess_shell",
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
         return_value=mock_proc,
     ) as mock_create:
@@ -108,6 +110,8 @@ async def test_create_process_filters_envs_by_allowlist(process_manager, monkeyp
             envs={"TEST_VAR": "injected-value", "PARENT_DISALLOWED": "blocked"},
         )
 
+    mock_create.assert_called_once()
+    assert mock_create.call_args.args == ("echo", "test")
     child_env = mock_create.call_args.kwargs["env"]
     assert child_env["TEST_VAR"] == "injected-value"
     assert child_env["PARENT_ALLOWED"] == "parent-allowed-value"
