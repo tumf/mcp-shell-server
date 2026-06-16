@@ -9,3 +9,10 @@
 ## Final Validation
 
 Archive validation itself is the authoritative final OpenSpec validation gate. Expected archive gate: `cflx openspec validate contain-redirection-paths --archive-gate`.
+
+## Acceptance #1 Failure Follow-up
+- [x] tests/test_process_manager_additional.py::test_execute_pipeline_last_stdout_handle fails: MagicMock(spec=IO) does not pass isinstance(x, io.IOBase) check at process_manager.py:301. Fixed with runtime-valid `io.TextIOBase` mock. Verified by targeted pytest run `ba4315106109015f4a6ef654a68ff3c0`.
+- [x] tests/test_shell_executor.py::test_combined_redirections fails: uses absolute paths for both input and output redirection targets. Fixed by using relative redirection filenames while keeping absolute paths only for fixture setup/assertions. Verified by targeted pytest run `ba4315106109015f4a6ef654a68ff3c0`.
+- [x] tests/test_shell_executor.py::test_input_redirection fails: uses absolute path os.path.join(temp_test_dir, 'in.txt') as redirection target. Fixed by using relative filename 'in.txt'. Verified by targeted pytest run `ba4315106109015f4a6ef654a68ff3c0`.
+- [x] tests/test_shell_executor.py::test_output_redirection fails: uses absolute path os.path.join(temp_test_dir, 'out.txt') as redirection target, now rejected by containment check in io_redirection_handler.py:96. Fixed by using relative filename 'out.txt'. Verified by targeted pytest run `ba4315106109015f4a6ef654a68ff3c0`.
+- [x] tests/test_shell_executor.py::test_output_redirection_with_append fails: uses absolute path os.path.join(temp_test_dir, 'test.txt'). Fixed by using relative filename 'test.txt'. Verified by targeted pytest run `ba4315106109015f4a6ef654a68ff3c0`.

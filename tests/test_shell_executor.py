@@ -1,6 +1,6 @@
+import io
 import os
 import tempfile
-from typing import IO
 from unittest.mock import AsyncMock
 
 import pytest
@@ -437,12 +437,13 @@ async def test_output_redirection(
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,cat")
     output_file = os.path.join(temp_test_dir, "out.txt")
+    output_target = "out.txt"
 
     # Test > redirection
     # Mock empty output for echo commands
     mock_process_manager.execute_with_timeout.return_value = (b"", b"")
     result = await shell_executor_with_mock.execute(
-        ["echo", "hello", ">", output_file], directory=temp_test_dir
+        ["echo", "hello", ">", output_target], directory=temp_test_dir
     )
     assert result["error"] is None
     assert result["status"] == 0
@@ -450,7 +451,7 @@ async def test_output_redirection(
     # Test >> redirection (append)
     mock_process_manager.execute_with_timeout.return_value = (b"", b"")
     result = await shell_executor_with_mock.execute(
-        ["echo", "world", ">>", output_file], directory=temp_test_dir
+        ["echo", "world", ">>", output_target], directory=temp_test_dir
     )
     assert result["error"] is None
     assert result["status"] == 0
@@ -477,6 +478,7 @@ async def test_input_redirection(
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
     input_file = os.path.join(temp_test_dir, "in.txt")
+    input_target = "in.txt"
 
     # Mock the file operations
     mock_file = mocker.mock_open(read_data="test content")
@@ -485,7 +487,7 @@ async def test_input_redirection(
     # Test < redirection
     mock_process_manager.execute_with_timeout.return_value = (b"test content\n", b"")
     result = await shell_executor_with_mock.execute(
-        ["cat", "<", input_file], directory=temp_test_dir
+        ["cat", "<", input_target], directory=temp_test_dir
     )
     assert result["error"] is None
     assert result["status"] == 0
@@ -504,6 +506,8 @@ async def test_combined_redirections(
     monkeypatch.setenv("ALLOW_COMMANDS", "cat,tr")
     input_file = os.path.join(temp_test_dir, "in.txt")
     output_file = os.path.join(temp_test_dir, "out.txt")
+    input_target = "in.txt"
+    output_target = "out.txt"
 
     # Create input file
     with open(input_file, "w") as f:
@@ -511,7 +515,17 @@ async def test_combined_redirections(
 
     # Test < and > redirection together
     result = await shell_executor_with_mock.execute(
-        ["cat", "<", input_file, "|", "tr", "[:lower:]", "[:upper:]", ">", output_file],
+        [
+            "cat",
+            "<",
+            input_target,
+            "|",
+            "tr",
+            "[:lower:]",
+            "[:upper:]",
+            ">",
+            output_target,
+        ],
         directory=temp_test_dir,
     )
     assert result["error"] is None
@@ -573,6 +587,8 @@ async def test_complex_pipeline_with_redirections(
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep,tr,cat")
     input_file = os.path.join(temp_test_dir, "pipeline_input.txt")
     output_file = os.path.join(temp_test_dir, "pipeline_output.txt")
+    input_target = "pipeline_input.txt"
+    output_target = "pipeline_output.txt"
 
     # Create a test input file
     with open(input_file, "w") as f:
@@ -592,7 +608,7 @@ async def test_complex_pipeline_with_redirections(
         [
             "cat",
             "<",
-            input_file,
+            input_target,
             "|",
             "grep",
             "l",
@@ -601,7 +617,7 @@ async def test_complex_pipeline_with_redirections(
             "a-z",
             "A-Z",
             ">",
-            output_file,
+            output_target,
         ],
         directory=temp_test_dir,
     )
@@ -779,10 +795,11 @@ async def test_io_handle_close(
     """Test IO handle closing functionality"""
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
-    test_file = os.path.join(temp_test_dir, "test.txt")
+    test_target = "test.txt"
 
-    # Create file handler that will raise IOError on close
-    mock_file = mocker.MagicMock(spec=IO)
+    # Create a runtime-valid file handler that will raise IOError on close.
+    # typing.IO is not accepted by isinstance(..., io.IOBase) checks.
+    mock_file = mocker.MagicMock(spec=io.IOBase)
     mock_file.close.side_effect = IOError("Failed to close file")
 
     # Patch the open function to return our mock
@@ -793,7 +810,7 @@ async def test_io_handle_close(
 
     # Execute should not raise an error
     await shell_executor_with_mock.execute(
-        ["echo", "hello", ">", test_file], directory=temp_test_dir
+        ["echo", "hello", ">", test_target], directory=temp_test_dir
     )
 
     # Verify our mock's close method was called
@@ -883,15 +900,16 @@ async def test_output_redirection_with_append(
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,cat")
     output_file = os.path.join(temp_test_dir, "test.txt")
+    output_target = "test.txt"
 
     # Write initial content
     await shell_executor_with_mock.execute(
-        ["echo", "hello", ">", output_file], directory=temp_test_dir
+        ["echo", "hello", ">", output_target], directory=temp_test_dir
     )
 
     # Append content
     result = await shell_executor_with_mock.execute(
-        ["echo", "world", ">>", output_file], directory=temp_test_dir
+        ["echo", "world", ">>", output_target], directory=temp_test_dir
     )
     assert result["error"] is None
     assert result["status"] == 0
