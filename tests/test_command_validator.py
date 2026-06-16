@@ -154,3 +154,34 @@ def test_dangerous_exec_capable_vectors_are_rejected(validator, monkeypatch):
     for argv, expected in dangerous_commands:
         with pytest.raises(ValueError, match=expected):
             validator.validate_command(argv)
+
+
+def test_git_alias_exec_bypass_is_rejected(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    dangerous_commands = [
+        ["git", "-c", "alias.pwn=!sh -c \"touch marker\"", "pwn"],
+        ["git", "-calias.pwn=!sh -c \"touch marker\"", "pwn"],
+        ["git", "-c", "url.alias.example=!not-an-exec-alias", "status"],
+        ["git", "-c", "Alias.pwn=!sh -c \"touch marker\"", "pwn"],
+    ]
+
+    for command in dangerous_commands:
+        with pytest.raises(ValueError, match="git alias exec"):
+            validator.validate_command(command)
+
+
+def test_git_non_exec_config_is_allowed(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    allowed_commands = [
+        ["git", "-c", "user.name=Example", "status"],
+        ["git", "-c", "core.commentChar=!", "status"],
+        ["git", "-calias.safe=status", "safe"],
+        ["git", "status"],
+    ]
+
+    for command in allowed_commands:
+        validator.validate_command(command)

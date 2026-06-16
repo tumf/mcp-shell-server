@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from mcp_shell_server.shell_executor import ShellExecutor
+
 
 def clear_env(monkeypatch):
     monkeypatch.delenv("ALLOW_COMMANDS", raising=False)
@@ -18,6 +20,31 @@ def temp_test_dir():
     with tempfile.TemporaryDirectory() as tmpdirname:
         # Return the real path to handle macOS /private/tmp symlink
         yield os.path.realpath(tmpdirname)
+
+
+@pytest.mark.asyncio
+async def test_git_alias_exec_poc_is_rejected_without_side_effect(
+    tmp_path, monkeypatch, caplog
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+    marker = tmp_path / "git-alias-poc-marker"
+    executor = ShellExecutor()
+
+    with caplog.at_level(logging.INFO, logger="mcp-shell-server.audit"):
+        result = await executor.execute(
+            ["git", "-c", f'alias.pwn=!sh -c "touch {marker}"', "pwn"],
+            str(tmp_path),
+        )
+
+    assert result["status"] == 1
+    assert "git alias exec" in result["error"]
+    assert not marker.exists()
+    assert any(
+        record.audit["result_type"] == "rejected"
+        and record.audit["command"] == "git"
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
