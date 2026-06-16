@@ -126,6 +126,29 @@ async def test_pipeline_preserves_full_argv_segments(
 
 
 @pytest.mark.asyncio
+async def test_pipeline_allows_newline_argument_after_safe_command_name(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
+    """Pipeline validation rejects unsafe command names without rejecting data args."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep")
+    mock_process_manager.execute_pipeline.return_value = (b"world\n", b"", 0)
+
+    result = await shell_executor_with_mock.execute(
+        ["echo", "hello\nworld", "|", "grep", "world"],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["error"] is None
+    assert result["stdout"].strip() == "world"
+    mock_process_manager.execute_pipeline.assert_awaited_once()
+    assert mock_process_manager.execute_pipeline.await_args.args[0] == [
+        ["echo", "hello\nworld"],
+        ["grep", "world"],
+    ]
+
+
+@pytest.mark.asyncio
 async def test_pipeline_rejects_metacharacter_injected_command(
     shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
 ):
