@@ -188,8 +188,11 @@ Error response:
 The server implements several security measures:
 
 1. **Command Whitelisting**: Only explicitly allowed commands can be executed
-2. **Shell Operator Validation**: Commands after shell operators (;, &&, ||, |) are also validated against the whitelist
-3. **No Shell Injection**: Commands are executed directly without shell interpretation
+2. **Dangerous Argument Rejection**: Known execution-bypass vectors such as `find -exec`, `awk` programs containing `system()`, `tar --checkpoint-action=exec`, `xargs`, shells, interpreters, and `env` are rejected before subprocess creation even when the command name appears in `ALLOW_COMMANDS` or `ALLOWED_COMMANDS`
+3. **Shell Operator Validation**: Commands after shell operators (;, &&, ||, |) are also validated against the whitelist and argument policy
+4. **No Shell Injection**: Commands are executed directly without shell interpretation
+
+`ALLOW_COMMANDS` and `ALLOWED_COMMANDS` are command-name allowlists, not a sandbox. Do not allow exec-capable tools unless there is an explicit argument policy that makes the intended subset safe.
 
 ## Development
 

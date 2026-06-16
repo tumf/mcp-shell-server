@@ -7,6 +7,39 @@ import os
 import re
 from typing import Dict, List
 
+logger = logging.getLogger(__name__)
+
+DANGEROUS_COMMANDS = frozenset(
+    {
+        "awk",
+        "bash",
+        "csh",
+        "dash",
+        "env",
+        "fish",
+        "gawk",
+        "ksh",
+        "lua",
+        "mawk",
+        "node",
+        "perl",
+        "php",
+        "python",
+        "python2",
+        "python3",
+        "ruby",
+        "sh",
+        "tar",
+        "tcsh",
+        "xargs",
+        "zsh",
+    }
+)
+
+DANGEROUS_EXEC_CAPABLE_COMMANDS = DANGEROUS_COMMANDS - {"awk", "gawk", "mawk", "tar"}
+AWK_COMMANDS = frozenset({"awk", "gawk", "mawk"})
+TAR_CHECKPOINT_ACTION_PREFIX = "--checkpoint-action=exec"
+
 
 LOGGER = logging.getLogger(__name__)
 UNSAFE_COMMAND_PATTERN_CHARS = frozenset(" \t\r\n;&|<>`$(){}")
@@ -109,8 +142,7 @@ class CommandValidator:
             if token == "|":
                 if not current_cmd:
                     raise ValueError("Empty command before pipe operator")
-                if not self.is_command_allowed(current_cmd[0]):
-                    raise ValueError(f"Command not allowed: {current_cmd[0]}")
+                self.validate_command(current_cmd)
                 current_cmd = []
             elif token in [";", "&&", "||"]:
                 raise ValueError(f"Unexpected shell operator in pipeline: {token}")
@@ -118,10 +150,52 @@ class CommandValidator:
                 current_cmd.append(token)
 
         if current_cmd:
-            if not self.is_command_allowed(current_cmd[0]):
-                raise ValueError(f"Command not allowed: {current_cmd[0]}")
+            self.validate_command(current_cmd)
 
         return {}
+
+    def _reject_dangerous_command_name(self, command_name: str) -> None:
+        """Reject default-denied tools that can launch other programs."""
+        is_versioned_interpreter = bool(
+            re.fullmatch(
+                r"(?:python|python3|python2|pypy|perl|ruby|php|node)\d*(?:\.\d+)*",
+                command_name,
+            )
+        )
+        if command_name in DANGEROUS_EXEC_CAPABLE_COMMANDS or is_versioned_interpreter:
+            logger.warning(
+                "Rejecting exec-capable command under default policy: %s", command_name
+            )
+            raise ValueError(
+                f"Command rejected by default argument policy: {command_name}"
+            )
+
+    def _reject_dangerous_arguments(self, command_name: str, args: List[str]) -> None:
+        """Reject known argument vectors that bypass command-name allowlisting."""
+        if command_name == "find" and "-exec" in args:
+            logger.warning("Rejecting find -exec before subprocess creation")
+            raise ValueError("Command rejected by default argument policy: find -exec")
+
+        if command_name in AWK_COMMANDS:
+            awk_program = "\n".join(args)
+            if re.search(r"\bsystem\s*\(", awk_program):
+                logger.warning("Rejecting awk system() before subprocess creation")
+                raise ValueError(
+                    "Command rejected by default argument policy: awk system()"
+                )
+
+        if command_name == "tar" and any(
+            arg == TAR_CHECKPOINT_ACTION_PREFIX
+            or arg.startswith(f"{TAR_CHECKPOINT_ACTION_PREFIX}=")
+            for arg in args
+        ):
+            logger.warning(
+                "Rejecting tar --checkpoint-action=exec before subprocess creation"
+            )
+            raise ValueError(
+                "Command rejected by default argument policy: "
+                "tar --checkpoint-action=exec"
+            )
 
     def validate_command(self, command: List[str]) -> None:
         """
@@ -145,3 +219,8 @@ class CommandValidator:
         cleaned_cmd = command[0].strip()
         if not self.is_command_allowed(cleaned_cmd):
             raise ValueError(f"Command not allowed: {cleaned_cmd}")
+
+        normalized_cmd = os.path.basename(cleaned_cmd).lower()
+        args = command[1:]
+        self._reject_dangerous_command_name(normalized_cmd)
+        self._reject_dangerous_arguments(normalized_cmd, args)

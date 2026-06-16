@@ -99,6 +99,64 @@ async def test_empty_command(
 
 
 @pytest.mark.asyncio
+async def test_rejected_dangerous_single_command_never_creates_process(
+    shell_executor_with_mock,
+    mock_process_manager,
+    temp_test_dir,
+    monkeypatch,
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "find")
+
+    result = await shell_executor_with_mock.execute(
+        ["find", ".", "-exec", "id", "{}", "+"], temp_test_dir
+    )
+
+    assert result["status"] == 1
+    assert "find -exec" in result["error"]
+    mock_process_manager.create_process.assert_not_called()
+    mock_process_manager.execute_with_timeout.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rejected_dangerous_pipeline_segment_never_executes_pipeline(
+    shell_executor_with_mock,
+    mock_process_manager,
+    temp_test_dir,
+    monkeypatch,
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "cat,xargs")
+
+    result = await shell_executor_with_mock.execute(
+        ["cat", "items.txt", "|", "xargs", "sh", "-c", "id"], temp_test_dir
+    )
+
+    assert result["status"] == 1
+    assert "xargs" in result["error"]
+    mock_process_manager.execute_pipeline.assert_not_called()
+    mock_process_manager.create_process.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rejected_env_never_creates_process(
+    shell_executor_with_mock,
+    mock_process_manager,
+    temp_test_dir,
+    monkeypatch,
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "env")
+
+    result = await shell_executor_with_mock.execute(["env"], temp_test_dir)
+
+    assert result["status"] == 1
+    assert "env" in result["error"]
+    mock_process_manager.create_process.assert_not_called()
+    mock_process_manager.execute_with_timeout.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_command_with_space_in_allow_commands(
     shell_executor_with_mock,
     mock_process_manager,
@@ -915,22 +973,11 @@ async def test_execute_with_custom_env(
 ):
     """Test command execution with custom environment variables"""
     clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "env,printenv")
+    monkeypatch.setenv("ALLOW_COMMANDS", "printenv")
 
     custom_env = {"TEST_VAR1": "test_value1", "TEST_VAR2": "test_value2"}
 
-    # Test env command
-    mock_process_manager.execute_with_timeout.return_value = (
-        b"TEST_VAR1=test_value1\nTEST_VAR2=test_value2\n",
-        b"",
-    )
-    result = await shell_executor_with_mock.execute(
-        ["env"], directory=temp_test_dir, envs=custom_env
-    )
-    assert "TEST_VAR1=test_value1" in result["stdout"]
-    assert "TEST_VAR2=test_value2" in result["stdout"]
-
-    # Test specific variable - Update mock for printenv command
+    # Test specific variable with a non exec-capable environment reader.
     mock_process_manager.execute_with_timeout.return_value = (b"test_value1\n", b"")
     result = await shell_executor_with_mock.execute(
         ["printenv", "TEST_VAR1"], directory=temp_test_dir, envs=custom_env
@@ -947,10 +994,10 @@ async def test_execute_env_override(
 ):
     """Test that custom environment variables override system variables"""
     clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "env")
+    monkeypatch.setenv("ALLOW_COMMANDS", "printenv")
     monkeypatch.setenv("TEST_VAR", "original_value")
 
-    # Mock env command with new environment variable
+    # Mock printenv command with new environment variable
     mock_process_manager.execute_with_timeout.return_value = (
         b"TEST_VAR=new_value\n",
         b"",
@@ -958,7 +1005,7 @@ async def test_execute_env_override(
 
     # Override system environment variable
     result = await shell_executor_with_mock.execute(
-        ["env"], directory=temp_test_dir, envs={"TEST_VAR": "new_value"}
+        ["printenv", "TEST_VAR"], directory=temp_test_dir, envs={"TEST_VAR": "new_value"}
     )
 
     assert "TEST_VAR=new_value" in result["stdout"]
@@ -974,16 +1021,16 @@ async def test_execute_with_empty_env(
 ):
     """Test command execution with empty environment variables"""
     clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "env")
+    monkeypatch.setenv("ALLOW_COMMANDS", "printenv")
 
-    # Mock env command with system environment
+    # Mock printenv command with system environment
     mock_process_manager.execute_with_timeout.return_value = (
         b"PATH=/usr/bin\nHOME=/home/user\n",
         b"",
     )
 
     result = await shell_executor_with_mock.execute(
-        ["env"], directory=temp_test_dir, envs={}
+        ["printenv"], directory=temp_test_dir, envs={}
     )
 
     # Command should still work with system environment
