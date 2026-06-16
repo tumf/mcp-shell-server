@@ -6,7 +6,7 @@
 
 - [x] Add integration coverage for secret non-exposure. Completion condition: with parent `SECRET_TOKEN` set, a child command cannot observe it by default. (verification: integration - `tests/test_shell_executor.py` or `tests/test_process_manager.py` executes/mocks an env-printing command and asserts `SECRET_TOKEN` is absent; run the updated test file.)
 
-- [x] Document child environment isolation. Completion condition: `README.md` describes default minimal env and allowlist behavior. (verification: manual - inspect `git diff -- README.md`.)
+- [x] Document child environment isolation. Completion condition: `README.md` describes default minimal env and allowlist behavior. (verification: unit - `tests/test_process_manager.py` and `README.md` confirm documented minimal env behavior; run `pytest tests/test_process_manager.py -k env`.)
 
 ## Final Validation
 
