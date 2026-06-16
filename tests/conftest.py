@@ -3,7 +3,7 @@ Test configuration and fixtures.
 """
 
 import asyncio
-from typing import IO
+import io
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,7 +15,7 @@ from mcp_shell_server.shell_executor import ShellExecutor
 @pytest.fixture
 def mock_file(mocker):
     """Provide a mock file object."""
-    mock = mocker.MagicMock(spec=IO)
+    mock = mocker.MagicMock(spec=io.IOBase)
     mock.close = mocker.MagicMock()
     return mock
 
