@@ -282,6 +282,36 @@ async def test_output_limit_is_enforced_with_mocked_communicate(process_manager)
     assert exc_info.value.stdout == b"abc"
 
 
+@pytest.mark.asyncio
+async def test_execute_with_timeout_terminates_real_process(process_manager):
+    """Timed-out subprocesses are terminated and reaped promptly."""
+    process = await process_manager.create_process(
+        [sys.executable, "-c", "import time; time.sleep(10)"],
+        directory=None,
+    )
+
+    with pytest.raises(asyncio.TimeoutError):
+        await process_manager.execute_with_timeout(process, timeout=0.05)
+
+    assert process.returncode is not None
+
+
+@pytest.mark.asyncio
+async def test_output_limit_terminates_real_high_output_process(process_manager):
+    """High-output subprocesses are capped without buffering full output."""
+    process = await process_manager.create_process(
+        [sys.executable, "-c", "import sys; sys.stdout.write('x' * 4096)"],
+        directory=None,
+    )
+
+    with pytest.raises(OutputLimitExceeded) as exc_info:
+        await process_manager.execute_with_timeout(process, timeout=1, output_limit=64)
+
+    assert exc_info.value.stream_name == "stdout"
+    assert exc_info.value.stdout == b"x" * 64
+    assert process.returncode is not None
+
+
 def test_child_environment_does_not_inherit_secrets(process_manager, monkeypatch):
     """Parent secrets are not copied unless explicitly allowlisted."""
     monkeypatch.setenv("SECRET_TOKEN", "do-not-leak")
