@@ -85,6 +85,7 @@ class ShellExecutor:
         stderr: str = "",
         stdout: str = "",
         timeout: Optional[int] = None,
+        output_limit: Optional[int] = None,
         return_code: Optional[int] = None,
         redirections: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -95,6 +96,7 @@ class ShellExecutor:
             "directory": os.path.realpath(directory) if directory else None,
             "redirections": redirections or {},
             "timeout": timeout,
+            "output_limit": output_limit,
             "stdout_bytes": len(stdout.encode()),
             "stderr_bytes": len(stderr.encode()),
             "return_code": return_code,
@@ -225,6 +227,7 @@ class ShellExecutor:
                     stdout=stdout_text,
                     stderr=stderr_text,
                     timeout=timeout,
+                    output_limit=output_limit,
                     return_code=final_returncode,
                     redirections=redirection_metadata,
                 )
@@ -251,18 +254,49 @@ class ShellExecutor:
                     stdout_handle.close()
 
                 message = f"Command timed out after {timeout} seconds"
-                self._audit("timeout", cmd, directory, start_time, stderr=message, timeout=timeout, return_code=-1, redirections=redirection_metadata)
+                self._audit(
+                    "timeout",
+                    cmd,
+                    directory,
+                    start_time,
+                    stderr=message,
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=-1,
+                    redirections=redirection_metadata,
+                )
                 return self._error_result(message, start_time, status=-1)
             except OutputLimitExceeded as e:
                 if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
                     stdout_handle.close()
                 message = str(e)
-                self._audit("output_cap", cmd, directory, start_time, stdout=e.stdout.decode(errors="replace"), stderr=e.stderr.decode(errors="replace") or message, timeout=timeout, return_code=-1, redirections=redirection_metadata)
+                self._audit(
+                    "output_cap",
+                    cmd,
+                    directory,
+                    start_time,
+                    stdout=e.stdout.decode(errors="replace"),
+                    stderr=e.stderr.decode(errors="replace") or message,
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=-1,
+                    redirections=redirection_metadata,
+                )
                 return self._error_result(message, start_time, status=-1)
             except Exception as e:
                 if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
                     stdout_handle.close()
-                self._audit("process_error", cmd, directory, start_time, stderr=str(e), timeout=timeout, return_code=getattr(process, "returncode", None), redirections=redirection_metadata)
+                self._audit(
+                    "process_error",
+                    cmd,
+                    directory,
+                    start_time,
+                    stderr=str(e),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=getattr(process, "returncode", None),
+                    redirections=redirection_metadata,
+                )
                 return self._error_result(str(e), start_time)
 
         finally:
@@ -335,6 +369,7 @@ class ShellExecutor:
                     stdout=final_output,
                     stderr=final_stderr,
                     timeout=timeout,
+                    output_limit=output_limit,
                     return_code=returncode,
                     redirections=redirection_metadata,
                 )
@@ -350,12 +385,33 @@ class ShellExecutor:
             except OutputLimitExceeded as e:
                 await self.process_manager.cleanup_processes([])
                 message = str(e)
-                self._audit("output_cap", commands[0] if commands else [], directory, start_time, stdout=e.stdout.decode(errors="replace"), stderr=e.stderr.decode(errors="replace") or message, timeout=timeout, return_code=-1, redirections=redirection_metadata)
+                self._audit(
+                    "output_cap",
+                    commands[0] if commands else [],
+                    directory,
+                    start_time,
+                    stdout=e.stdout.decode(errors="replace"),
+                    stderr=e.stderr.decode(errors="replace") or message,
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=-1,
+                    redirections=redirection_metadata,
+                )
                 return self._error_result(message, start_time, status=-1)
             except Exception as e:
                 await self.process_manager.cleanup_processes([])
                 result_type = "timeout" if isinstance(e, TimeoutError) else "process_error"
-                self._audit(result_type, commands[0] if commands else [], directory, start_time, stderr=str(e), timeout=timeout, return_code=-1, redirections=redirection_metadata)
+                self._audit(
+                    result_type,
+                    commands[0] if commands else [],
+                    directory,
+                    start_time,
+                    stderr=str(e),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=-1,
+                    redirections=redirection_metadata,
+                )
                 return {
                     "error": str(e),
                     "stdout": "",

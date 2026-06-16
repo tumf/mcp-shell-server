@@ -324,6 +324,29 @@ async def test_command_completes_within_timeout(
 
 
 @pytest.mark.asyncio
+async def test_effective_timeout_and_output_limit_reach_process_manager(
+    shell_executor_with_mock,
+    mock_process_manager,
+    temp_test_dir,
+    monkeypatch,
+):
+    """Executor forwards server-computed bounds into process execution."""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+    mock_process_manager.execute_with_timeout.return_value = (b"ok\n", b"")
+
+    result = await shell_executor_with_mock.execute(
+        ["echo", "ok"], temp_test_dir, timeout=17, output_limit=256
+    )
+
+    assert result["error"] is None
+    mock_process_manager.create_process.assert_awaited()
+    mock_process_manager.execute_with_timeout.assert_awaited_once()
+    assert mock_process_manager.execute_with_timeout.await_args.kwargs["timeout"] == 17
+    assert mock_process_manager.execute_with_timeout.await_args.kwargs["output_limit"] == 256
+
+
+@pytest.mark.asyncio
 async def test_allowed_commands_alias(
     shell_executor_with_mock,
     mock_process_manager,
