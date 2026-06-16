@@ -2,9 +2,19 @@
 Provides validation for shell commands and ensures they are allowed to be executed.
 """
 
+import logging
 import os
 import re
 from typing import Dict, List
+
+
+LOGGER = logging.getLogger(__name__)
+UNSAFE_COMMAND_PATTERN_CHARS = frozenset(" \t\r\n;&|<>`$(){}")
+
+
+def _contains_unsafe_command_pattern_chars(value: str) -> bool:
+    """Return True when a command name or allow pattern contains shell syntax."""
+    return any(char in UNSAFE_COMMAND_PATTERN_CHARS for char in value)
 
 
 class CommandValidator:
@@ -27,11 +37,24 @@ class CommandValidator:
         return {cmd.strip() for cmd in commands.split(",") if cmd.strip()}
 
     def _get_allowed_patterns(self) -> List[re.Pattern]:
-        """Get the list of allowed regex patterns from environment variables"""
+        """Get command-name regex patterns from environment variables."""
         allow_patterns = os.environ.get("ALLOW_PATTERNS", "")
         patterns = [
             pattern.strip() for pattern in allow_patterns.split(",") if pattern.strip()
         ]
+        unsafe_patterns = [
+            pattern
+            for pattern in patterns
+            if _contains_unsafe_command_pattern_chars(pattern)
+        ]
+        if unsafe_patterns:
+            LOGGER.warning(
+                "Rejecting unsafe ALLOW_PATTERNS entries containing whitespace or shell metacharacters",
+                extra={"unsafe_pattern_count": len(unsafe_patterns)},
+            )
+            raise ValueError(
+                "ALLOW_PATTERNS entries must match command names only and cannot contain whitespace or shell metacharacters"
+            )
         return [re.compile(pattern) for pattern in patterns]
 
     def get_allowed_commands(self) -> list[str]:
@@ -39,12 +62,18 @@ class CommandValidator:
         return list(self._get_allowed_commands())
 
     def is_command_allowed(self, command: str) -> bool:
-        """Check if a command is in the allowed list or matches an allowed pattern"""
+        """Check if a command name is allowed directly or by full pattern match."""
         cmd = command.strip()
+        if _contains_unsafe_command_pattern_chars(cmd):
+            LOGGER.warning(
+                "Rejecting unsafe command name containing whitespace or shell metacharacters",
+                extra={"command_length": len(cmd)},
+            )
+            return False
         if cmd in self._get_allowed_commands():
             return True
         for pattern in self._get_allowed_patterns():
-            if pattern.match(cmd):
+            if pattern.fullmatch(cmd):
                 return True
         return False
 

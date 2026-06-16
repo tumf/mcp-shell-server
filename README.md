@@ -124,6 +124,12 @@ ALLOWED_COMMANDS="ls ,echo, cat"      # With spaces (using alias)
 ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
 ```
 
+`ALLOW_PATTERNS` can be used for comma-separated regular expressions that match command names. Each pattern is applied with full-match semantics, so `ALLOW_PATTERNS="ls"` allows only the command name `ls` and does not allow `lsof` or `ls -la`. Patterns and command names containing whitespace or shell metacharacters are rejected; do not use `ALLOW_PATTERNS` to describe shell command strings or argument-level policies.
+
+```bash
+ALLOW_PATTERNS="python[0-9.]*,node"    # Command-name patterns only
+```
+
 ### Request Format
 
 ```python
