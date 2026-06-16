@@ -49,6 +49,21 @@ async def test_create_process(process_manager):
 
 
 @pytest.mark.asyncio
+async def test_create_process_string_adapter_still_uses_exec(process_manager):
+    """Backward-compatible string adapter must still avoid shell execution."""
+    mock_proc = create_mock_process()
+    with patch(
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+        return_value=mock_proc,
+    ) as mock_create:
+        process = await process_manager.create_process("echo test", directory="/tmp")
+
+    assert process == mock_proc
+    assert mock_create.call_args.args == ("echo", "test")
+
+
+@pytest.mark.asyncio
 async def test_execute_with_timeout_success(process_manager):
     """Test executing a process with successful completion."""
     mock_proc = create_mock_process()
