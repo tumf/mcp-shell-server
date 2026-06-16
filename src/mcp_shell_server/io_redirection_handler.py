@@ -6,18 +6,10 @@ from typing import IO, Any, Dict, List, Optional, Tuple, Union
 
 
 class IORedirectionHandler:
-    """Handles input/output redirection for shell commands."""
+    """Handles contained input/output redirection for argv commands."""
 
     def validate_redirection_syntax(self, command: List[str]) -> None:
-        """
-        Validate the syntax of redirection operators in the command.
-
-        Args:
-            command (List[str]): Command and its arguments including redirections
-
-        Raises:
-            ValueError: If the redirection syntax is invalid
-        """
+        """Validate the syntax of redirection operators in the command."""
         prev_token = None
         for token in command:
             if token in [">", ">>", "<"]:
@@ -30,19 +22,7 @@ class IORedirectionHandler:
     def process_redirections(
         self, command: List[str]
     ) -> Tuple[List[str], Dict[str, Union[None, str, bool]]]:
-        """
-        Process input/output redirections in the command.
-
-        Args:
-            command (List[str]): Command and its arguments including redirections
-
-        Returns:
-            Tuple[List[str], Dict[str, Any]]: Processed command without redirections and
-                                           redirection configuration
-
-        Raises:
-            ValueError: If the redirection syntax is invalid
-        """
+        """Remove redirection operators from argv and return redirect metadata."""
         self.validate_redirection_syntax(command)
 
         cmd = []
@@ -56,7 +36,6 @@ class IORedirectionHandler:
         while i < len(command):
             token = command[i]
 
-            # Output redirection
             if token in [">", ">>"]:
                 if i + 1 >= len(command):
                     raise ValueError("Missing path for output redirection")
@@ -68,7 +47,6 @@ class IORedirectionHandler:
                 i += 2
                 continue
 
-            # Input redirection
             if token == "<":
                 if i + 1 >= len(command):
                     raise ValueError("Missing path for input redirection")
@@ -84,45 +62,50 @@ class IORedirectionHandler:
 
         return cmd, redirects
 
+    def _resolve_contained_path(self, directory: Optional[str], user_path: str) -> str:
+        if directory is None:
+            raise ValueError("Directory is required for redirection")
+        if not user_path:
+            raise ValueError("Redirection path must not be empty")
+        if os.path.isabs(user_path):
+            raise ValueError("Redirection path must be relative")
+
+        path_parts = user_path.split(os.sep)
+        if os.altsep:
+            path_parts.extend(user_path.split(os.altsep))
+        if ".." in path_parts:
+            raise ValueError("Redirection path must not contain parent traversal")
+
+        base = os.path.realpath(directory)
+        target = os.path.realpath(os.path.join(base, user_path))
+        try:
+            if os.path.commonpath([base, target]) != base:
+                raise ValueError("Redirection path escapes working directory")
+        except ValueError as e:
+            if "escapes" in str(e):
+                raise
+            raise ValueError("Redirection path escapes working directory") from e
+        return target
+
     async def setup_redirects(
         self,
         redirects: Dict[str, Union[None, str, bool]],
         directory: Optional[str] = None,
     ) -> Dict[str, Union[IO[Any], int, str, None]]:
-        """
-        Set up file handles for redirections.
-
-        Args:
-            redirects (Dict[str, Union[None, str, bool]]): Redirection configuration
-            directory (Optional[str]): Working directory for file paths
-
-        Returns:
-            Dict[str, Union[IO[Any], int, str, None]]: File handles for subprocess
-        """
+        """Set up file handles for contained redirections."""
         handles: Dict[str, Union[IO[Any], int, str, None]] = {}
 
-        # Handle input redirection
         if redirects["stdin"]:
-            path = (
-                os.path.join(directory or "", str(redirects["stdin"]))
-                if directory and redirects["stdin"]
-                else str(redirects["stdin"])
-            )
+            path = self._resolve_contained_path(directory, str(redirects["stdin"]))
             try:
-                file = open(path, "r")
-                handles["stdin"] = asyncio.subprocess.PIPE
-                handles["stdin_data"] = file.read()
-                file.close()
+                with open(path, "r") as file:
+                    handles["stdin"] = asyncio.subprocess.PIPE
+                    handles["stdin_data"] = file.read()
             except (FileNotFoundError, IOError) as e:
                 raise ValueError("Failed to open input file") from e
 
-        # Handle output redirection
         if redirects["stdout"]:
-            path = (
-                os.path.join(directory or "", str(redirects["stdout"]))
-                if directory and redirects["stdout"]
-                else str(redirects["stdout"])
-            )
+            path = self._resolve_contained_path(directory, str(redirects["stdout"]))
             mode = "a" if redirects.get("stdout_append") else "w"
             try:
                 handles["stdout"] = open(path, mode)
@@ -138,12 +121,7 @@ class IORedirectionHandler:
     async def cleanup_handles(
         self, handles: Dict[str, Union[IO[Any], int, None]]
     ) -> None:
-        """
-        Clean up file handles after command execution.
-
-        Args:
-            handles (Dict[str, Union[IO[Any], int, None]]): File handles to clean up
-        """
+        """Clean up file handles after command execution."""
         for key in ["stdout", "stderr"]:
             handle = handles.get(key)
             if handle and hasattr(handle, "close") and not isinstance(handle, int):
