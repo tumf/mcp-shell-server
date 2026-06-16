@@ -1,4 +1,5 @@
 import asyncio
+import io
 import logging
 import os
 import pwd
@@ -220,7 +221,7 @@ class ShellExecutor:
 
                 # Get stdout handle if present
                 stdout_value = handles.get("stdout")
-                if isinstance(stdout_value, (IO, int)):
+                if isinstance(stdout_value, (io.IOBase, int)):
                     stdout_handle = stdout_value
 
             except ValueError as e:
@@ -264,7 +265,7 @@ class ShellExecutor:
                     )
 
                     # ファイルハンドル処理
-                    if isinstance(stdout_handle, IO):
+                    if isinstance(stdout_handle, io.IOBase):
                         try:
                             stdout_handle.close()
                         except (IOError, OSError) as e:
@@ -296,7 +297,7 @@ class ShellExecutor:
                             pass
 
                     # ファイルハンドルクリーンアップ
-                    if isinstance(stdout_handle, IO):
+                    if isinstance(stdout_handle, io.IOBase):
                         stdout_handle.close()
 
                     return {
@@ -308,7 +309,7 @@ class ShellExecutor:
                     }
 
             except Exception as e:  # Exception handler for subprocess
-                if isinstance(stdout_handle, IO):
+                if isinstance(stdout_handle, io.IOBase):
                     stdout_handle.close()
                 return {
                     "error": str(e),
@@ -371,7 +372,7 @@ class ShellExecutor:
                 )
                 stdout_value = handles.get("stdout")
                 pipeline_stdout = (
-                    stdout_value if isinstance(stdout_value, (IO, int)) else None
+                    stdout_value if isinstance(stdout_value, (io.IOBase, int)) else None
                 )
 
             # Execute pipeline

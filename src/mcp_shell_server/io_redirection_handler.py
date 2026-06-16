@@ -1,8 +1,11 @@
 """IO redirection handling module for MCP Shell Server."""
 
 import asyncio
+import logging
 import os
 from typing import IO, Any, Dict, List, Optional, Tuple, Union
+
+LOGGER = logging.getLogger(__name__)
 
 
 class IORedirectionHandler:
@@ -84,6 +87,62 @@ class IORedirectionHandler:
 
         return cmd, redirects
 
+    def _resolve_redirection_path(self, target: str, directory: Optional[str]) -> str:
+        """Resolve a redirection target and ensure it stays under directory."""
+        if not directory:
+            LOGGER.error("Redirection rejected because working directory is missing")
+            raise ValueError("Redirection requires a working directory")
+
+        if os.path.isabs(target):
+            LOGGER.warning(
+                "Rejected absolute redirection target",
+                extra={"target": target, "directory": directory},
+            )
+            raise ValueError("Redirection target must be relative to the working directory")
+
+        raw_parts = target.split(os.sep)
+        if os.path.altsep:
+            raw_parts = [part for value in raw_parts for part in value.split(os.path.altsep)]
+        if ".." in raw_parts:
+            LOGGER.warning(
+                "Rejected parent-traversal redirection target",
+                extra={"target": target, "directory": directory},
+            )
+            raise ValueError("Redirection target cannot contain parent traversal")
+
+        base_path = os.path.realpath(directory)
+        candidate_path = os.path.realpath(os.path.join(base_path, target))
+        try:
+            common_path = os.path.commonpath([base_path, candidate_path])
+        except ValueError as e:
+            LOGGER.warning(
+                "Rejected redirection target on a different path root",
+                extra={"target": target, "directory": directory},
+            )
+            raise ValueError("Redirection target escapes the working directory") from e
+
+        if common_path != base_path:
+            LOGGER.warning(
+                "Rejected redirection target escaping working directory",
+                extra={
+                    "target": target,
+                    "directory": directory,
+                    "resolved_target": candidate_path,
+                    "resolved_directory": base_path,
+                },
+            )
+            raise ValueError("Redirection target escapes the working directory")
+
+        LOGGER.debug(
+            "Resolved contained redirection target",
+            extra={
+                "target": target,
+                "directory": directory,
+                "resolved_target": candidate_path,
+            },
+        )
+        return candidate_path
+
     async def setup_redirects(
         self,
         redirects: Dict[str, Union[None, str, bool]],
@@ -103,30 +162,42 @@ class IORedirectionHandler:
 
         # Handle input redirection
         if redirects["stdin"]:
-            path = (
-                os.path.join(directory or "", str(redirects["stdin"]))
-                if directory and redirects["stdin"]
-                else str(redirects["stdin"])
+            path = self._resolve_redirection_path(str(redirects["stdin"]), directory)
+            LOGGER.info(
+                "Opening contained input redirection",
+                extra={"path": path, "directory": directory},
             )
             try:
                 file = open(path, "r")
-                handles["stdin"] = asyncio.subprocess.PIPE
-                handles["stdin_data"] = file.read()
-                file.close()
+                try:
+                    handles["stdin"] = asyncio.subprocess.PIPE
+                    handles["stdin_data"] = file.read()
+                finally:
+                    file.close()
             except (FileNotFoundError, IOError) as e:
+                LOGGER.error(
+                    "Failed to open input redirection file",
+                    exc_info=True,
+                    extra={"path": path, "directory": directory},
+                )
                 raise ValueError("Failed to open input file") from e
 
         # Handle output redirection
         if redirects["stdout"]:
-            path = (
-                os.path.join(directory or "", str(redirects["stdout"]))
-                if directory and redirects["stdout"]
-                else str(redirects["stdout"])
-            )
+            path = self._resolve_redirection_path(str(redirects["stdout"]), directory)
             mode = "a" if redirects.get("stdout_append") else "w"
+            LOGGER.info(
+                "Opening contained output redirection",
+                extra={"path": path, "directory": directory, "mode": mode},
+            )
             try:
                 handles["stdout"] = open(path, mode)
             except (IOError, PermissionError) as e:
+                LOGGER.error(
+                    "Failed to open output redirection file",
+                    exc_info=True,
+                    extra={"path": path, "directory": directory, "mode": mode},
+                )
                 raise ValueError(f"Failed to open output file: {e}") from e
         else:
             handles["stdout"] = asyncio.subprocess.PIPE

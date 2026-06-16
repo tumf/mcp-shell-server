@@ -1,4 +1,5 @@
 import asyncio
+import io
 import os
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -6,6 +7,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from mcp_shell_server.shell_executor import ShellExecutor
+
+
+class ClosableStringIO(io.StringIO):
+    """StringIO with observable close calls for runtime IOBase checks."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.close_call_count = 0
+
+    def close(self) -> None:
+        self.close_call_count += 1
+        super().close()
 
 
 @pytest.fixture
@@ -44,11 +57,7 @@ async def test_execute_timeout_with_stdout_handle_closed(monkeypatch, temp_test_
     mock_process_manager = MagicMock()
     executor = ShellExecutor(process_manager=mock_process_manager)
 
-    # Create a proper IO mock that will pass isinstance(stdout_handle, IO) check
-    from typing import IO
-
-    mock_stdout = MagicMock(spec=IO)
-    mock_stdout.close = MagicMock()
+    mock_stdout = ClosableStringIO()
 
     with patch.object(
         executor.io_handler,
@@ -85,7 +94,7 @@ async def test_execute_timeout_with_stdout_handle_closed(monkeypatch, temp_test_
         assert result["status"] == -1
 
         # Verify stdout handle close was called (covers line 300)
-        mock_stdout.close.assert_called_once()
+        assert mock_stdout.close_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -99,11 +108,7 @@ async def test_execute_generic_exception_closes_stdout_handle(
     mock_process_manager = MagicMock()
     executor = ShellExecutor(process_manager=mock_process_manager)
 
-    # Create a proper IO mock that will pass isinstance(stdout_handle, IO) check
-    from typing import IO
-
-    mock_stdout = MagicMock(spec=IO)
-    mock_stdout.close = MagicMock()
+    mock_stdout = ClosableStringIO()
 
     with patch.object(
         executor.io_handler,
@@ -133,7 +138,7 @@ async def test_execute_generic_exception_closes_stdout_handle(
         assert result["status"] == 1
 
         # Verify stdout handle close was called (covers line 312)
-        mock_stdout.close.assert_called_once()
+        assert mock_stdout.close_call_count == 1
 
 
 @pytest.mark.asyncio

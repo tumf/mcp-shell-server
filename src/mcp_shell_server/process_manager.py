@@ -1,6 +1,7 @@
 """Process management for shell command execution."""
 
 import asyncio
+import io
 import logging
 import os
 import signal
@@ -297,7 +298,7 @@ class ProcessManager:
                         raise ValueError(error_msg)
 
                     if i == len(commands) - 1:
-                        if last_stdout and isinstance(last_stdout, IO):
+                        if last_stdout and isinstance(last_stdout, io.IOBase):
                             last_stdout.write(stdout.decode("utf-8", errors="replace"))
                         else:
                             final_stdout = stdout if stdout else b""
