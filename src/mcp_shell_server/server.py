@@ -124,7 +124,11 @@ class ExecuteToolHandler:
                     },
                     "directory": {
                         "type": "string",
-                        "description": "Absolute path to a working directory where the command will be executed",
+                        "description": (
+                            "Optional working directory. Omit to use the MCP server "
+                            "process current working directory; relative paths are "
+                            "resolved from that same server process CWD."
+                        ),
                     },
                     "timeout": {
                         "type": "integer",
@@ -132,7 +136,7 @@ class ExecuteToolHandler:
                         "minimum": 1,
                     },
                 },
-                "required": ["command", "directory"],
+                "required": ["command"],
             },
         )
 
@@ -140,7 +144,7 @@ class ExecuteToolHandler:
         """Execute the shell command with the given arguments."""
         command = arguments.get("command", [])
         stdin = arguments.get("stdin")
-        directory = arguments.get("directory", "/tmp")
+        raw_directory = arguments.get("directory")
         requested_timeout = arguments.get("timeout")
 
         if not command:
@@ -149,15 +153,24 @@ class ExecuteToolHandler:
         if not isinstance(command, list):
             raise ValueError("'command' must be an array")
 
-        if not directory:
-            raise ValueError("Directory is required")
+        effective_directory = (
+            self.executor.directory_manager.resolve_effective_directory(raw_directory)
+        )
+        self.executor.directory_manager.validate_directory(effective_directory)
+        logger.debug(
+            "Resolved shell execution working directory",
+            extra={
+                "directory_provided": "directory" in arguments,
+                "effective_directory": effective_directory,
+            },
+        )
 
         effective_timeout = self._effective_timeout(requested_timeout)
         content: list[TextContent] = []
         try:
             result = await self.executor.execute(
                 command,
-                directory,
+                effective_directory,
                 stdin,
                 effective_timeout,
                 output_limit=self.output_limit,

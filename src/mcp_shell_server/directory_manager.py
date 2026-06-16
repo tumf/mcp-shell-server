@@ -7,6 +7,22 @@ class DirectoryManager:
     Manages directory validation and path operations for shell command execution.
     """
 
+    def resolve_effective_directory(self, directory: Optional[str]) -> str:
+        """Resolve an optional request directory against the server process CWD."""
+        if directory is None:
+            return os.getcwd()
+
+        if not isinstance(directory, str):
+            raise ValueError("'directory' must be a string")
+
+        if directory.strip() == "":
+            raise ValueError("Directory cannot be empty")
+
+        if os.path.isabs(directory):
+            return directory
+
+        return os.path.abspath(directory)
+
     def validate_directory(self, directory: Optional[str]) -> None:
         """
         Validate if the directory exists and is accessible.

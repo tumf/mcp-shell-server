@@ -1,4 +1,5 @@
 import logging
+import os
 from unittest.mock import AsyncMock
 
 import pytest
@@ -14,11 +15,93 @@ async def test_server_input_validation():
     with pytest.raises(ValueError, match="'command' must be an array"):
         await handler.run_tool({"command": "not an array", "directory": "/"})
 
-    with pytest.raises(ValueError, match="Directory is required"):
+    with pytest.raises(ValueError, match="Directory cannot be empty"):
         await handler.run_tool({"command": ["echo", "test"], "directory": ""})
+
+    with pytest.raises(ValueError, match="Directory cannot be empty"):
+        await handler.run_tool({"command": ["echo", "test"], "directory": "  \t"})
 
     with pytest.raises(ValueError, match="No command provided"):
         await handler.run_tool({"directory": "/"})
+
+
+@pytest.mark.asyncio
+async def test_server_omitted_directory_resolves_to_process_cwd(monkeypatch, tmp_path):
+    """Omitting directory uses the MCP server process current working directory."""
+    monkeypatch.chdir(tmp_path)
+    handler = ExecuteToolHandler()
+    handler.executor.execute = AsyncMock(
+        return_value={"error": None, "stdout": "ok", "stderr": "", "status": 0}
+    )
+
+    await handler.run_tool({"command": ["echo", "ok"]})
+
+    handler.executor.execute.assert_awaited_once_with(
+        ["echo", "ok"],
+        str(tmp_path),
+        None,
+        handler.default_timeout,
+        output_limit=handler.output_limit,
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_relative_directory_resolves_from_process_cwd(
+    monkeypatch, tmp_path
+):
+    """Relative directory inputs are resolved from the server process CWD."""
+    child = tmp_path / "child"
+    child.mkdir()
+    monkeypatch.chdir(tmp_path)
+    handler = ExecuteToolHandler()
+    handler.executor.execute = AsyncMock(
+        return_value={"error": None, "stdout": "ok", "stderr": "", "status": 0}
+    )
+
+    await handler.run_tool({"command": ["echo", "ok"], "directory": "child"})
+
+    handler.executor.execute.assert_awaited_once_with(
+        ["echo", "ok"],
+        os.path.abspath("child"),
+        None,
+        handler.default_timeout,
+        output_limit=handler.output_limit,
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_absolute_directory_is_passed_through(tmp_path):
+    """Absolute directory inputs keep the existing validated behavior."""
+    handler = ExecuteToolHandler()
+    handler.executor.execute = AsyncMock(
+        return_value={"error": None, "stdout": "ok", "stderr": "", "status": 0}
+    )
+
+    await handler.run_tool({"command": ["echo", "ok"], "directory": str(tmp_path)})
+
+    handler.executor.execute.assert_awaited_once_with(
+        ["echo", "ok"],
+        str(tmp_path),
+        None,
+        handler.default_timeout,
+        output_limit=handler.output_limit,
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_rejects_missing_effective_directory_before_execution(tmp_path):
+    """Nonexistent relative directories fail before subprocess execution."""
+    handler = ExecuteToolHandler()
+    handler.executor.execute = AsyncMock(
+        return_value={"error": None, "stdout": "ok", "stderr": "", "status": 0}
+    )
+
+    with pytest.raises(ValueError, match="Directory does not exist"):
+        await handler.run_tool(
+            {"command": ["echo", "ok"], "directory": str(tmp_path / "missing")}
+        )
+
+    handler.executor.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
