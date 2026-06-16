@@ -133,6 +133,8 @@ ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
 ALLOW_PATTERNS="python[0-9.]*,node"    # Command-name patterns only
 ```
 
+Allowlisting a command name is not a sandbox for that program's own argument-level execution features. The server applies default argument hardening even when the binary is allowed: known exec-capable vectors such as `find -exec`, shell/interpreter launchers, `awk system()`, `tar --checkpoint-action=exec`, `env`, `xargs`, and git alias external commands are rejected before subprocess creation. For example, `ALLOW_COMMANDS="git"` does not permit `git -c alias.pwn=!sh -c "touch marker" pwn`; the git `alias.<name>=!<cmd>` exec form is rejected by default.
+
 ### Child process environment
 
 Commands run with an isolated child environment. The server does **not** pass the full parent process environment to child commands, so unrelated variables such as API tokens, credentials, and `SECRET_TOKEN` are absent by default.

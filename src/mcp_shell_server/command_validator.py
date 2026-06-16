@@ -83,6 +83,27 @@ class CommandValidator:
         if any(operator in cmd for operator in [";", "&&", "||", "`", "\n", "\r"]):
             raise ValueError(f"Unexpected shell operator: {cmd}")
 
+    def _git_config_values(self, args: List[str]) -> List[str]:
+        values: List[str] = []
+        index = 0
+        while index < len(args):
+            arg = args[index]
+            if arg == "-c":
+                if index + 1 < len(args):
+                    values.append(args[index + 1])
+                index += 2
+                continue
+            if arg.startswith("-c") and arg != "-c":
+                values.append(arg[2:])
+            index += 1
+        return values
+
+    def _is_git_alias_exec_config(self, config_value: str) -> bool:
+        alias_index = config_value.lower().find("alias.")
+        if alias_index == -1:
+            return False
+        return config_value.find("=!", alias_index + len("alias.")) != -1
+
     def _validate_default_argument_policy(self, command: List[str]) -> None:
         cmd = self._validate_command_name_form(command[0])
         args = command[1:]
@@ -102,6 +123,14 @@ class CommandValidator:
         ):
             raise ValueError(
                 "Command rejected by default security policy: tar checkpoint exec"
+            )
+
+        if cmd == "git" and any(
+            self._is_git_alias_exec_config(config_value)
+            for config_value in self._git_config_values(args)
+        ):
+            raise ValueError(
+                "Command rejected by default security policy: git alias exec"
             )
 
     def validate_pipeline(self, commands: List[str]) -> Dict[str, str]:
