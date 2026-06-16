@@ -44,37 +44,33 @@ class MockProcess:
 def setup_mock_subprocess(monkeypatch):
     """Set up mock subprocess to avoid interactive shell warnings"""
 
-    async def mock_create_subprocess_shell(
-        cmd,
+    async def mock_create_subprocess_exec(
+        *argv,
         stdin=None,
         stdout=None,
         stderr=None,
         env=None,
         cwd=None,
-        preexec_fn=None,
-        start_new_session=None,
     ):
-        # Return appropriate output based on command
-        if "echo" in cmd:
+        # Return appropriate output based on argv command execution.
+        if "echo" in argv:
             return MockProcess(stdout=b"hello world\n", stderr=b"", returncode=0)
-        elif "pwd" in cmd:
+        elif "pwd" in argv:
             return MockProcess(stdout=cwd.encode() + b"\n", stderr=b"", returncode=0)
-        elif "cat" in cmd:
+        elif "cat" in argv:
             return MockProcess(
                 stdout=None, stderr=b"", returncode=0
             )  # Will echo back stdin
-        elif "ps" in cmd:
+        elif "ps" in argv:
             return MockProcess(stdout=b"bash\n", stderr=b"", returncode=0)
-        elif "env" in cmd:
+        elif "env" in argv:
             return MockProcess(stdout=b"TEST_ENV=value\n", stderr=b"", returncode=0)
-        elif "sleep" in cmd:
+        elif "sleep" in argv:
             return MockProcess(stdout=b"", stderr=b"", returncode=0)
         else:
             return MockProcess(stdout=b"", stderr=b"", returncode=0)
 
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_shell", mock_create_subprocess_shell
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", mock_create_subprocess_exec)
 
 
 @pytest.fixture
@@ -94,7 +90,7 @@ async def test_list_tools():
 async def test_tool_execution_timeout(monkeypatch):
     """Test tool execution with timeout"""
     monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
-    with pytest.raises(RuntimeError, match="Command execution timed out"):
+    with pytest.raises(RuntimeError, match="Command timed out after 1 seconds"):
         await call_tool(
             "shell_execute",
             {
@@ -269,7 +265,7 @@ async def test_call_tool_with_timeout(monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
     with pytest.raises(RuntimeError) as excinfo:
         await call_tool("shell_execute", {"command": ["sleep", "2"], "timeout": 1})
-    assert "Command execution timed out" in str(excinfo.value)
+    assert "Command timed out after 1 seconds" in str(excinfo.value)
 
 
 @pytest.mark.asyncio
@@ -310,11 +306,11 @@ async def test_disallowed_command(monkeypatch):
 async def test_call_tool_with_stderr(monkeypatch):
     """Test command execution with stderr output"""
 
-    async def mock_create_subprocess_shell(
-        cmd, stdin=None, stdout=None, stderr=None, env=None, cwd=None
+    async def mock_create_subprocess_exec(
+        *argv, stdin=None, stdout=None, stderr=None, env=None, cwd=None
     ):
         # Return mock process with stderr for ls command
-        if "ls" in cmd:
+        if "ls" in argv:
             return MockProcess(
                 stdout=b"",
                 stderr=b"ls: cannot access '/nonexistent/directory': No such file or directory\n",
@@ -322,9 +318,7 @@ async def test_call_tool_with_stderr(monkeypatch):
             )
         return MockProcess(stdout=b"", stderr=b"", returncode=0)
 
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_shell", mock_create_subprocess_shell
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", mock_create_subprocess_exec)
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
     result = await call_tool(
         "shell_execute",
@@ -427,14 +421,14 @@ async def test_shell_startup(monkeypatch, temp_test_dir):
 
 @pytest.mark.asyncio
 async def test_environment_variables(monkeypatch, temp_test_dir):
-    """Test to check environment variables during test execution"""
+    """The default security policy rejects env even when allowlisted."""
     setup_mock_subprocess(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "printenv")
-    result = await call_tool(
-        "shell_execute",
-        {"command": ["printenv"], "directory": temp_test_dir},
-    )
-    assert len(result) == 1
+    monkeypatch.setenv("ALLOW_COMMANDS", "env")
+    with pytest.raises(RuntimeError, match="Command rejected by default security policy: env"):
+        await call_tool(
+            "shell_execute",
+            {"command": ["env"], "directory": temp_test_dir},
+        )
 
 
 @pytest.mark.asyncio

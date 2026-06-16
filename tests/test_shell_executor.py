@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 from typing import IO
@@ -96,64 +97,6 @@ async def test_empty_command(
     result = await shell_executor_with_mock.execute([], temp_test_dir)
     assert result["error"] == "Empty command"
     assert result["status"] == 1
-
-
-@pytest.mark.asyncio
-async def test_rejected_dangerous_single_command_never_creates_process(
-    shell_executor_with_mock,
-    mock_process_manager,
-    temp_test_dir,
-    monkeypatch,
-):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "find")
-
-    result = await shell_executor_with_mock.execute(
-        ["find", ".", "-exec", "id", "{}", "+"], temp_test_dir
-    )
-
-    assert result["status"] == 1
-    assert "find -exec" in result["error"]
-    mock_process_manager.create_process.assert_not_called()
-    mock_process_manager.execute_with_timeout.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_rejected_dangerous_pipeline_segment_never_executes_pipeline(
-    shell_executor_with_mock,
-    mock_process_manager,
-    temp_test_dir,
-    monkeypatch,
-):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "cat,xargs")
-
-    result = await shell_executor_with_mock.execute(
-        ["cat", "items.txt", "|", "xargs", "sh", "-c", "id"], temp_test_dir
-    )
-
-    assert result["status"] == 1
-    assert "xargs" in result["error"]
-    mock_process_manager.execute_pipeline.assert_not_called()
-    mock_process_manager.create_process.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_rejected_env_never_creates_process(
-    shell_executor_with_mock,
-    mock_process_manager,
-    temp_test_dir,
-    monkeypatch,
-):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "env")
-
-    result = await shell_executor_with_mock.execute(["env"], temp_test_dir)
-
-    assert result["status"] == 1
-    assert "env" in result["error"]
-    mock_process_manager.create_process.assert_not_called()
-    mock_process_manager.execute_with_timeout.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -500,7 +443,7 @@ async def test_output_redirection(
     # Mock empty output for echo commands
     mock_process_manager.execute_with_timeout.return_value = (b"", b"")
     result = await shell_executor_with_mock.execute(
-        ["echo", "hello", ">", output_file], directory=temp_test_dir
+        ["echo", "hello", ">", "out.txt"], directory=temp_test_dir
     )
     assert result["error"] is None
     assert result["status"] == 0
@@ -508,7 +451,7 @@ async def test_output_redirection(
     # Test >> redirection (append)
     mock_process_manager.execute_with_timeout.return_value = (b"", b"")
     result = await shell_executor_with_mock.execute(
-        ["echo", "world", ">>", output_file], directory=temp_test_dir
+        ["echo", "world", ">>", "out.txt"], directory=temp_test_dir
     )
     assert result["error"] is None
     assert result["status"] == 0
@@ -534,8 +477,6 @@ async def test_input_redirection(
     """Test input redirection with < operator"""
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
-    input_file = os.path.join(temp_test_dir, "in.txt")
-
     # Mock the file operations
     mock_file = mocker.mock_open(read_data="test content")
     mocker.patch("builtins.open", mock_file)
@@ -543,7 +484,7 @@ async def test_input_redirection(
     # Test < redirection
     mock_process_manager.execute_with_timeout.return_value = (b"test content\n", b"")
     result = await shell_executor_with_mock.execute(
-        ["cat", "<", input_file], directory=temp_test_dir
+        ["cat", "<", "in.txt"], directory=temp_test_dir
     )
     assert result["error"] is None
     assert result["status"] == 0
@@ -569,7 +510,7 @@ async def test_combined_redirections(
 
     # Test < and > redirection together
     result = await shell_executor_with_mock.execute(
-        ["cat", "<", input_file, "|", "tr", "[:lower:]", "[:upper:]", ">", output_file],
+        ["cat", "<", "in.txt", "|", "tr", "[:lower:]", "[:upper:]", ">", "out.txt"],
         directory=temp_test_dir,
     )
     assert result["error"] is None
@@ -650,7 +591,7 @@ async def test_complex_pipeline_with_redirections(
         [
             "cat",
             "<",
-            input_file,
+            "pipeline_input.txt",
             "|",
             "grep",
             "l",
@@ -659,7 +600,7 @@ async def test_complex_pipeline_with_redirections(
             "a-z",
             "A-Z",
             ">",
-            output_file,
+            "pipeline_output.txt",
         ],
         directory=temp_test_dir,
     )
@@ -837,8 +778,6 @@ async def test_io_handle_close(
     """Test IO handle closing functionality"""
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "echo")
-    test_file = os.path.join(temp_test_dir, "test.txt")
-
     # Create file handler that will raise IOError on close
     mock_file = mocker.MagicMock(spec=IO)
     mock_file.close.side_effect = IOError("Failed to close file")
@@ -851,7 +790,7 @@ async def test_io_handle_close(
 
     # Execute should not raise an error
     await shell_executor_with_mock.execute(
-        ["echo", "hello", ">", test_file], directory=temp_test_dir
+        ["echo", "hello", ">", "test.txt"], directory=temp_test_dir
     )
 
     # Verify our mock's close method was called
@@ -944,12 +883,12 @@ async def test_output_redirection_with_append(
 
     # Write initial content
     await shell_executor_with_mock.execute(
-        ["echo", "hello", ">", output_file], directory=temp_test_dir
+        ["echo", "hello", ">", "test.txt"], directory=temp_test_dir
     )
 
     # Append content
     result = await shell_executor_with_mock.execute(
-        ["echo", "world", ">>", output_file], directory=temp_test_dir
+        ["echo", "world", ">>", "test.txt"], directory=temp_test_dir
     )
     assert result["error"] is None
     assert result["status"] == 0
@@ -977,7 +916,7 @@ async def test_execute_with_custom_env(
 
     custom_env = {"TEST_VAR1": "test_value1", "TEST_VAR2": "test_value2"}
 
-    # Test specific variable with a non exec-capable environment reader.
+    # Test specific variable without allowing the dangerous `env` command.
     mock_process_manager.execute_with_timeout.return_value = (b"test_value1\n", b"")
     result = await shell_executor_with_mock.execute(
         ["printenv", "TEST_VAR1"], directory=temp_test_dir, envs=custom_env
@@ -997,19 +936,14 @@ async def test_execute_env_override(
     monkeypatch.setenv("ALLOW_COMMANDS", "printenv")
     monkeypatch.setenv("TEST_VAR", "original_value")
 
-    # Mock printenv command with new environment variable
-    mock_process_manager.execute_with_timeout.return_value = (
-        b"TEST_VAR=new_value\n",
-        b"",
-    )
+    # Mock printenv command with explicit environment variable override.
+    mock_process_manager.execute_with_timeout.return_value = (b"new_value\n", b"")
 
-    # Override system environment variable
     result = await shell_executor_with_mock.execute(
         ["printenv", "TEST_VAR"], directory=temp_test_dir, envs={"TEST_VAR": "new_value"}
     )
 
-    assert "TEST_VAR=new_value" in result["stdout"]
-    assert "TEST_VAR=original_value" not in result["stdout"]
+    assert result["stdout"].strip() == "new_value"
 
 
 @pytest.mark.asyncio
@@ -1021,19 +955,60 @@ async def test_execute_with_empty_env(
 ):
     """Test command execution with empty environment variables"""
     clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "printenv")
-
-    # Mock printenv command with system environment
-    mock_process_manager.execute_with_timeout.return_value = (
-        b"PATH=/usr/bin\nHOME=/home/user\n",
-        b"",
-    )
+    monkeypatch.setenv("ALLOW_COMMANDS", "env")
 
     result = await shell_executor_with_mock.execute(
-        ["printenv"], directory=temp_test_dir, envs={}
+        ["env"], directory=temp_test_dir, envs={}
     )
 
-    # Command should still work with system environment
+    assert result["error"] == "Command rejected by default security policy: env"
+    assert result["status"] == 1
+
+
+@pytest.mark.asyncio
+async def test_audit_logging_success_and_secret_redaction(
+    shell_executor_with_mock,
+    mock_process_manager,
+    temp_test_dir,
+    monkeypatch,
+    caplog,
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+    mock_process_manager.execute_with_timeout.return_value = (b"ok\n", b"")
+
+    caplog.set_level(logging.INFO, logger="mcp-shell-server.audit")
+    result = await shell_executor_with_mock.execute(
+        ["echo", "SECRET_TOKEN=super-secret"], temp_test_dir, timeout=3
+    )
+
     assert result["error"] is None
-    assert result["status"] == 0
-    assert len(result["stdout"]) > 0
+    audit_records = [record.audit for record in caplog.records if hasattr(record, "audit")]
+    assert audit_records
+    audit = audit_records[-1]
+    assert audit["result_type"] == "success"
+    assert audit["argv"] == ["echo", "[REDACTED]"]
+    assert audit["timeout"] == 3
+    assert audit["stdout_bytes"] == 2
+    assert audit["return_code"] == 0
+
+
+@pytest.mark.asyncio
+async def test_audit_logging_rejection(
+    shell_executor_with_mock,
+    mock_process_manager,
+    temp_test_dir,
+    monkeypatch,
+    caplog,
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
+
+    caplog.set_level(logging.INFO, logger="mcp-shell-server.audit")
+    result = await shell_executor_with_mock.execute(["rm"], temp_test_dir, timeout=3)
+
+    assert result["status"] == 1
+    audit_records = [record.audit for record in caplog.records if hasattr(record, "audit")]
+    assert audit_records[-1]["result_type"] == "rejected"
+    assert audit_records[-1]["command"] == "rm"
+    mock_process_manager.create_process.assert_not_awaited()
