@@ -117,6 +117,8 @@ class CommandValidator:
             elif token in [";", "&&", "||"]:
                 raise ValueError(f"Unexpected shell operator in pipeline: {token}")
             else:
+                if not current_cmd:
+                    self.validate_no_shell_operators(token)
                 current_cmd.append(token)
 
         if current_cmd:

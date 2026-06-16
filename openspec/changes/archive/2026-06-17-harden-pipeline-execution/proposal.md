@@ -1,8 +1,7 @@
 ---
 change_type: implementation
 priority: high
-dependencies:
-  - tighten-allow-patterns
+dependencies: []
 references:
   - GHSA-6rrx-pj43-m9p2 issue 3
   - src/mcp_shell_server/shell_executor.py
