@@ -123,7 +123,7 @@ async def test_audit_logging_success_and_redaction(tmp_path, monkeypatch, caplog
     audit = audit_records[-1].audit
     assert audit["result_type"] == "success"
     assert audit["command"] == "echo"
-    assert audit["argv"][1] == "[REDACTED]"
+    assert audit["argv"][1] == "[REDACTED]=[REDACTED]"
     assert audit["directory"] == str(tmp_path)
     assert audit["timeout"] == 5
     assert audit["return_code"] == 0

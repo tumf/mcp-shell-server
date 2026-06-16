@@ -15,7 +15,21 @@ from mcp_shell_server.io_redirection_handler import IORedirectionHandler
 from mcp_shell_server.process_manager import OutputLimitExceeded, ProcessManager
 
 logger = logging.getLogger("mcp-shell-server.audit")
-SECRET_MARKERS = ("SECRET", "TOKEN", "PASSWORD", "PASS", "KEY", "CREDENTIAL")
+SECRET_MARKERS = (
+    "SECRET",
+    "TOKEN",
+    "PASSWORD",
+    "PASS",
+    "PASSWD",
+    "API_KEY",
+    "ACCESS_KEY",
+    "PRIVATE_KEY",
+    "KEY",
+    "CREDENTIAL",
+    "AUTH",
+)
+SECRET_REDACTION = "[REDACTED]"
+HASH_REDACTION_PREFIX = "[sha256:"
 
 
 class ShellExecutor:
@@ -59,21 +73,47 @@ class ShellExecutor:
         except ProcessLookupError:
             pass
 
-    def _redact_value(self, value: str) -> str:
+    def _contains_secret_marker(self, value: str) -> bool:
         upper = value.upper()
-        if any(marker in upper for marker in SECRET_MARKERS):
-            return "[REDACTED]"
-        if "=" in value:
-            name, raw = value.split("=", 1)
-            if any(marker in name.upper() for marker in SECRET_MARKERS):
-                return f"{name}=[REDACTED]"
-            if len(raw) > 32 and not raw.isdigit():
-                digest = hashlib.sha256(raw.encode()).hexdigest()[:8]
-                return f"{name}=[sha256:{digest}]"
+        return any(marker in upper for marker in SECRET_MARKERS)
+
+    def _digest_value(self, value: str) -> str:
+        digest = hashlib.sha256(value.encode()).hexdigest()[:8]
+        return f"{HASH_REDACTION_PREFIX}{digest}]"
+
+    def _redact_scalar(self, value: str) -> str:
+        if self._contains_secret_marker(value):
+            return SECRET_REDACTION
+        if len(value) > 32 and not value.isdigit():
+            return self._digest_value(value)
         return value
+
+    def _redact_value(self, value: str) -> str:
+        if "=" not in value:
+            return self._redact_scalar(value)
+
+        name, raw = value.split("=", 1)
+        if self._contains_secret_marker(name):
+            return f"{SECRET_REDACTION}={SECRET_REDACTION}"
+        return f"{name}={self._redact_scalar(raw)}"
 
     def _redact_argv(self, argv: List[str]) -> List[str]:
         return [self._redact_value(arg) for arg in argv]
+
+    def _redact_envs(self, envs: Optional[Dict[str, str]]) -> Dict[str, str]:
+        if not envs:
+            return {}
+
+        redacted: Dict[str, str] = {}
+        for key, value in envs.items():
+            safe_key = SECRET_REDACTION if self._contains_secret_marker(key) else key
+            safe_value = (
+                SECRET_REDACTION
+                if self._contains_secret_marker(key)
+                else self._redact_scalar(str(value))
+            )
+            redacted[safe_key] = safe_value
+        return redacted
 
     def _audit(
         self,
@@ -84,9 +124,15 @@ class ShellExecutor:
         *,
         stderr: str = "",
         stdout: str = "",
+        stdout_bytes: Optional[int] = None,
+        stderr_bytes: Optional[int] = None,
         timeout: Optional[int] = None,
+        output_limit: Optional[int] = None,
         return_code: Optional[int] = None,
         redirections: Optional[Dict[str, Any]] = None,
+        envs: Optional[Dict[str, str]] = None,
+        rejection_reason: Optional[str] = None,
+        error_type: Optional[str] = None,
     ) -> None:
         event = {
             "timestamp": time.time(),
@@ -94,13 +140,19 @@ class ShellExecutor:
             "argv": self._redact_argv(command),
             "directory": os.path.realpath(directory) if directory else None,
             "redirections": redirections or {},
+            "env": self._redact_envs(envs),
             "timeout": timeout,
-            "stdout_bytes": len(stdout.encode()),
-            "stderr_bytes": len(stderr.encode()),
+            "output_limit": output_limit,
+            "stdout_bytes": stdout_bytes if stdout_bytes is not None else len(stdout.encode()),
+            "stderr_bytes": stderr_bytes if stderr_bytes is not None else len(stderr.encode()),
             "return_code": return_code,
             "duration": time.time() - start_time,
             "result_type": result_type,
         }
+        if rejection_reason is not None:
+            event["rejection_reason"] = self._redact_scalar(rejection_reason)
+        if error_type is not None:
+            event["error_type"] = error_type
         logger.info("shell_execution_audit", extra={"audit": event})
 
     def _error_result(
@@ -135,13 +187,33 @@ class ShellExecutor:
             try:
                 self._validate_directory(directory)
             except ValueError as e:
-                self._audit("rejected", audit_command, directory, start_time, stderr=str(e), timeout=timeout)
+                self._audit(
+                    "rejected",
+                    audit_command,
+                    directory,
+                    start_time,
+                    stderr=str(e),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    envs=envs,
+                    rejection_reason=str(e),
+                )
                 return self._error_result(str(e), start_time)
 
             preprocessed_command = self.preprocessor.preprocess_command(command)
             cleaned_command = self.preprocessor.clean_command(preprocessed_command)
             if not cleaned_command:
-                self._audit("rejected", audit_command, directory, start_time, stderr="Empty command", timeout=timeout)
+                self._audit(
+                    "rejected",
+                    audit_command,
+                    directory,
+                    start_time,
+                    stderr="Empty command",
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    envs=envs,
+                    rejection_reason="Empty command",
+                )
                 return self._error_result("Empty command", start_time)
 
             if "|" in cleaned_command:
@@ -154,14 +226,34 @@ class ShellExecutor:
                         commands, directory, timeout, envs, output_limit=output_limit
                     )
                 except ValueError as e:
-                    self._audit("rejected", cleaned_command, directory, start_time, stderr=str(e), timeout=timeout)
+                    self._audit(
+                        "rejected",
+                        cleaned_command,
+                        directory,
+                        start_time,
+                        stderr=str(e),
+                        timeout=timeout,
+                        output_limit=output_limit,
+                        envs=envs,
+                        rejection_reason=str(e),
+                    )
                     return self._error_result(str(e), start_time)
 
             for token in cleaned_command:
                 try:
                     self.validator.validate_no_shell_operators(token)
                 except ValueError as e:
-                    self._audit("rejected", cleaned_command, directory, start_time, stderr=str(e), timeout=timeout)
+                    self._audit(
+                        "rejected",
+                        cleaned_command,
+                        directory,
+                        start_time,
+                        stderr=str(e),
+                        timeout=timeout,
+                        output_limit=output_limit,
+                        envs=envs,
+                        rejection_reason=str(e),
+                    )
                     return self._error_result(str(e), start_time)
 
             try:
@@ -177,7 +269,18 @@ class ShellExecutor:
                 }
                 self.validator.validate_command(cmd)
             except ValueError as e:
-                self._audit("rejected", cleaned_command, directory, start_time, stderr=str(e), timeout=timeout, redirections=redirection_metadata)
+                self._audit(
+                    "rejected",
+                    cleaned_command,
+                    directory,
+                    start_time,
+                    stderr=str(e),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    redirections=redirection_metadata,
+                    envs=envs,
+                    rejection_reason=str(e),
+                )
                 return self._error_result(str(e), start_time)
 
             stdout_handle: Any = asyncio.subprocess.PIPE
@@ -191,12 +294,41 @@ class ShellExecutor:
                 if isinstance(stdout_value, int) or isinstance(stdout_value, io.IOBase) or hasattr(stdout_value, "write"):
                     stdout_handle = stdout_value
             except ValueError as e:
-                self._audit("rejected", cmd, directory, start_time, stderr=str(e), timeout=timeout, redirections=redirection_metadata)
+                self._audit(
+                    "rejected",
+                    cmd,
+                    directory,
+                    start_time,
+                    stderr=str(e),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    redirections=redirection_metadata,
+                    envs=envs,
+                    rejection_reason=str(e),
+                )
                 return self._error_result(str(e), start_time)
 
-            process = await self.process_manager.create_process(
-                cmd, directory, stdout_handle=stdout_handle, envs=envs, timeout=timeout
-            )
+            try:
+                process = await self.process_manager.create_process(
+                    cmd, directory, stdout_handle=stdout_handle, envs=envs, timeout=timeout
+                )
+            except Exception as e:
+                if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
+                    stdout_handle.close()
+                self._audit(
+                    "process_error",
+                    cmd,
+                    directory,
+                    start_time,
+                    stderr=str(e),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=None,
+                    redirections=redirection_metadata,
+                    envs=envs,
+                    error_type=type(e).__name__,
+                )
+                return self._error_result(str(e), start_time)
 
             try:
                 stdout, stderr = await asyncio.shield(
@@ -222,11 +354,13 @@ class ShellExecutor:
                     cmd,
                     directory,
                     start_time,
-                    stdout=stdout_text,
-                    stderr=stderr_text,
+                    stdout_bytes=len(stdout or b""),
+                    stderr_bytes=len(stderr or b""),
                     timeout=timeout,
+                    output_limit=output_limit,
                     return_code=final_returncode,
                     redirections=redirection_metadata,
+                    envs=envs,
                 )
 
                 return {
@@ -251,18 +385,56 @@ class ShellExecutor:
                     stdout_handle.close()
 
                 message = f"Command timed out after {timeout} seconds"
-                self._audit("timeout", cmd, directory, start_time, stderr=message, timeout=timeout, return_code=-1, redirections=redirection_metadata)
+                self._audit(
+                    "timeout",
+                    cmd,
+                    directory,
+                    start_time,
+                    stderr=message,
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=-1,
+                    redirections=redirection_metadata,
+                    envs=envs,
+                    error_type="TimeoutError",
+                )
                 return self._error_result(message, start_time, status=-1)
             except OutputLimitExceeded as e:
                 if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
                     stdout_handle.close()
                 message = str(e)
-                self._audit("output_cap", cmd, directory, start_time, stdout=e.stdout.decode(errors="replace"), stderr=e.stderr.decode(errors="replace") or message, timeout=timeout, return_code=-1, redirections=redirection_metadata)
+                self._audit(
+                    "output_cap",
+                    cmd,
+                    directory,
+                    start_time,
+                    stderr=message,
+                    stdout_bytes=len(e.stdout),
+                    stderr_bytes=len(e.stderr),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=-1,
+                    redirections=redirection_metadata,
+                    envs=envs,
+                    error_type=type(e).__name__,
+                )
                 return self._error_result(message, start_time, status=-1)
             except Exception as e:
                 if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
                     stdout_handle.close()
-                self._audit("process_error", cmd, directory, start_time, stderr=str(e), timeout=timeout, return_code=getattr(process, "returncode", None), redirections=redirection_metadata)
+                self._audit(
+                    "process_error",
+                    cmd,
+                    directory,
+                    start_time,
+                    stderr=str(e),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=getattr(process, "returncode", None),
+                    redirections=redirection_metadata,
+                    envs=envs,
+                    error_type=type(e).__name__,
+                )
                 return self._error_result(str(e), start_time)
 
         finally:
@@ -332,11 +504,13 @@ class ShellExecutor:
                     [part for cmd in parsed_commands for part in [*cmd, "|"]][:-1],
                     directory,
                     start_time,
-                    stdout=final_output,
-                    stderr=final_stderr,
+                    stdout_bytes=len(stdout or b""),
+                    stderr_bytes=len(stderr or b""),
                     timeout=timeout,
+                    output_limit=output_limit,
                     return_code=returncode,
                     redirections=redirection_metadata,
+                    envs=envs,
                 )
 
                 return {
@@ -350,12 +524,38 @@ class ShellExecutor:
             except OutputLimitExceeded as e:
                 await self.process_manager.cleanup_processes([])
                 message = str(e)
-                self._audit("output_cap", commands[0] if commands else [], directory, start_time, stdout=e.stdout.decode(errors="replace"), stderr=e.stderr.decode(errors="replace") or message, timeout=timeout, return_code=-1, redirections=redirection_metadata)
+                self._audit(
+                    "output_cap",
+                    commands[0] if commands else [],
+                    directory,
+                    start_time,
+                    stderr=message,
+                    stdout_bytes=len(e.stdout),
+                    stderr_bytes=len(e.stderr),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=-1,
+                    redirections=redirection_metadata,
+                    envs=envs,
+                    error_type=type(e).__name__,
+                )
                 return self._error_result(message, start_time, status=-1)
             except Exception as e:
                 await self.process_manager.cleanup_processes([])
                 result_type = "timeout" if isinstance(e, TimeoutError) else "process_error"
-                self._audit(result_type, commands[0] if commands else [], directory, start_time, stderr=str(e), timeout=timeout, return_code=-1, redirections=redirection_metadata)
+                self._audit(
+                    result_type,
+                    commands[0] if commands else [],
+                    directory,
+                    start_time,
+                    stderr=str(e),
+                    timeout=timeout,
+                    output_limit=output_limit,
+                    return_code=-1,
+                    redirections=redirection_metadata,
+                    envs=envs,
+                    error_type=type(e).__name__,
+                )
                 return {
                     "error": str(e),
                     "stdout": "",
@@ -367,5 +567,16 @@ class ShellExecutor:
                 await self.io_handler.cleanup_handles({"stdout": pipeline_stdout})
 
         except Exception as e:
-            self._audit("rejected", commands[0] if commands else [], directory, start_time, stderr=str(e), timeout=timeout, redirections=redirection_metadata)
+            self._audit(
+                "rejected",
+                commands[0] if commands else [],
+                directory,
+                start_time,
+                stderr=str(e),
+                timeout=timeout,
+                output_limit=output_limit,
+                redirections=redirection_metadata,
+                envs=envs,
+                rejection_reason=str(e),
+            )
             return self._error_result(str(e), start_time)

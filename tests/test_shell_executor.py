@@ -987,9 +987,9 @@ async def test_audit_logging_success_and_secret_redaction(
     assert audit_records
     audit = audit_records[-1]
     assert audit["result_type"] == "success"
-    assert audit["argv"] == ["echo", "[REDACTED]"]
+    assert audit["argv"] == ["echo", "[REDACTED]=[REDACTED]"]
     assert audit["timeout"] == 3
-    assert audit["stdout_bytes"] == 2
+    assert audit["stdout_bytes"] == 3
     assert audit["return_code"] == 0
 
 

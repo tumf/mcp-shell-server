@@ -20,6 +20,8 @@ The project treats command allowlist bypass, shell interpretation of user-contro
 
 ## Security Model
 
-`mcp-shell-server` validates command names and arguments, executes normal commands and pipelines through argv-based subprocess APIs, constrains redirection targets to the requested working directory, supplies a minimal child environment, enforces timeout/output limits, and emits structured audit logs with secret-like argv redaction.
+`mcp-shell-server` validates command names and arguments, executes normal commands and pipelines through argv-based subprocess APIs, constrains redirection targets to the requested working directory, supplies a minimal child environment, enforces timeout/output limits, and emits structured audit logs with secret-like argv and per-call environment metadata redaction.
+
+Audit events are structured `mcp-shell-server.audit` records for success, validation rejection, timeout, output-cap, and process-error outcomes. They include command metadata, resolved directory, redirection flags, timeout/output limits, output byte counts, return code when available, duration, and result type. They intentionally exclude raw stdout/stderr content. Secret-like names or values are replaced with `[REDACTED]`, and long non-numeric values are logged only as short SHA-256 digests.
 
 This is not a complete sandbox. Allowed programs still run with the privileges of the server process. Deploy the server with least-privilege OS users, tightly scoped working directories, conservative allowlists, and external sandboxing when clients are not fully trusted.
