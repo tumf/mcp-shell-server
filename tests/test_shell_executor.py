@@ -41,8 +41,8 @@ async def test_git_alias_exec_poc_is_rejected_without_side_effect(
     assert "git alias exec" in result["error"]
     assert not marker.exists()
     assert any(
-        record.audit["result_type"] == "rejected"
-        and record.audit["command"] == "git"
+        getattr(record, "audit", {}).get("result_type") == "rejected"
+        and getattr(record, "audit", {}).get("command") == "git"
         for record in caplog.records
     )
 
@@ -528,7 +528,6 @@ async def test_input_redirection(
     """Test input redirection with < operator"""
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "cat")
-    input_file = os.path.join(temp_test_dir, "in.txt")
     input_target = "in.txt"
 
     # Mock the file operations

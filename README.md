@@ -9,8 +9,6 @@ A secure shell command execution server implementing the Model Context Protocol 
 
 <a href="https://glama.ai/mcp/servers/rt2d4pbn22"><img width="380" height="200" src="https://glama.ai/mcp/servers/rt2d4pbn22/badge" alt="mcp-shell-server MCP server" /></a>
 
-<a href="https://glama.ai/mcp/servers/rt2d4pbn22"><img width="380" height="200" src="https://glama.ai/mcp/servers/rt2d4pbn22/badge" alt="mcp-shell-server MCP server" /></a>
-
 ## Features
 
 * **Argv-based Command Execution**: Allowed commands run via subprocess argv without shell-string interpretation
@@ -73,17 +71,7 @@ code ~/Library/Application\ Support/Claude/claude_desktop_config.json
 }
 ```
 
-#### Installation
-
-### Installing via Smithery
-
-To install Shell Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-shell-server):
-
-```bash
-npx -y @smithery/cli install mcp-shell-server --client claude
-```
-
-### Manual Installation
+## Installation
 
 ### Installing via Smithery
 
@@ -97,14 +85,6 @@ npx -y @smithery/cli install mcp-shell-server --client claude
 
 ```bash
 pip install mcp-shell-server
-```
-
-### Installing via Smithery
-
-To install Shell Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-shell-server):
-
-```bash
-npx -y @smithery/cli install mcp-shell-server --client claude
 ```
 
 ## Usage
@@ -227,10 +207,10 @@ Error response:
 The server implements several security measures, but it is not an OS sandbox. A command-name allowlist reduces accidental exposure, but allowed binaries may still read accessible files, consume CPU, or perform behavior allowed by the operating system. For hostile workloads, run the server inside an external sandbox such as a container, VM, or OS policy boundary.
 
 1. **Command Whitelisting**: Only explicitly allowed command names or full-matching `ALLOW_PATTERNS` entries can be executed.
-2. **Default Argument Hardening**: Known exec-capable vectors such as shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, and `tar --checkpoint-action=exec` are rejected by default even when the command name is allowlisted.
+2. **Default Argument Hardening**: Known exec-capable vectors such as shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, `tar --checkpoint-action=exec`, and git external aliases are rejected by default even when the command name is allowlisted.
 3. **No Shell-String Execution**: Normal commands and pipelines are executed with `asyncio.create_subprocess_exec(*argv)`; user-controlled strings are not passed to a shell.
 4. **Contained Redirection**: Redirection paths must be relative to `directory`; absolute paths, `..` traversal, and symlink escapes are rejected before files are opened.
-5. **Environment Isolation**: Children receive `PATH`, `LANG`, and `LC_ALL` plus names listed in `MCP_SHELL_ENV_ALLOWLIST`. Parent secrets such as tokens are not inherited by default. Per-call `envs` values are added explicitly by the server caller.
+5. **Environment Isolation**: Children receive a minimal environment plus names listed in `MCP_SHELL_CHILD_ENV_ALLOWLIST`. Parent secrets such as tokens are not inherited by default. Per-call `envs` values are only accepted for explicitly allowlisted names.
 6. **Execution Limits**: `MCP_SHELL_DEFAULT_TIMEOUT_SECONDS` defaults to 30 seconds, `MCP_SHELL_MAX_TIMEOUT_SECONDS` defaults to 300 seconds, and `MCP_SHELL_OUTPUT_LIMIT_BYTES` defaults to 1 MiB per captured stdout/stderr stream. Client timeouts are clamped to the server maximum; omitted timeouts receive the default. Processes that time out or exceed the output cap are terminated and reaped before an explicit timeout/output-cap error is returned.
 7. **Audit Logging**: Each invocation emits structured audit metadata for success, rejection, timeout, output cap, and process error outcomes. Secret-like argv values are redacted; stdout/stderr content is not logged.
 
@@ -243,7 +223,7 @@ The server implements several security measures, but it is not an OS sandbox. A 
 | `MCP_SHELL_DEFAULT_TIMEOUT_SECONDS` | `30` | Timeout used when the client omits `timeout` |
 | `MCP_SHELL_MAX_TIMEOUT_SECONDS` | `300` | Maximum effective timeout accepted from clients |
 | `MCP_SHELL_OUTPUT_LIMIT_BYTES` | `1048576` | Maximum captured stdout/stderr bytes per process |
-| `MCP_SHELL_ENV_ALLOWLIST` | empty | Comma-separated parent environment variables copied into children |
+| `MCP_SHELL_CHILD_ENV_ALLOWLIST` | empty | Comma-separated parent or per-call environment variables allowed in children |
 | `MCP_SHELL_SAFE_PATH` | `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin` | PATH supplied to children |
 
 ## Development

@@ -7,10 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-06-17
+
 ### Security
 - Replaced shell-string subprocess execution with argv-based `create_subprocess_exec()` for normal commands and pipelines.
 - Hardened `ALLOW_PATTERNS` to use full command-name matching and reject unsafe shell metacharacter forms.
-- Rejected default exec-capable bypass vectors including shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, and `tar --checkpoint-action=exec`.
+- Rejected default exec-capable bypass vectors including shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, `tar --checkpoint-action=exec`, and git external aliases.
 - Enforced redirection containment under the validated working directory before file open side effects.
 - Isolated child process environments from parent secrets unless variables are explicitly allowlisted.
 - Added default/max timeout handling, output byte caps, and structured redacted audit logging.
