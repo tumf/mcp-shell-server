@@ -115,7 +115,7 @@ async def test_setup_errors(handler, tmp_path):
         "stdout": "/tmp/output.txt",
         "stdout_append": False,
     }
-    with pytest.raises(ValueError, match="Redirection path must be relative"):
+    with pytest.raises(ValueError, match="Redirection target must be relative to the working directory"):
         await handler.setup_redirects(redirects, str(tmp_path))
 
 
@@ -129,7 +129,7 @@ async def test_input_redirection_rejects_absolute_path_before_open(handler, tmp_
     }
 
     with patch("builtins.open") as mock_open:
-        with pytest.raises(ValueError, match="relative to the working directory"):
+        with pytest.raises(ValueError, match="Redirection target must be relative to the working directory"):
             await handler.setup_redirects(redirects, str(tmp_path))
 
     mock_open.assert_not_called()
@@ -310,7 +310,7 @@ async def test_symlink_escape_rejected(handler, tmp_path):
     os.symlink(outside_file, link)
     redirects = {"stdin": "link.txt", "stdout": None, "stdout_append": False}
 
-    with pytest.raises(ValueError, match="escapes working directory"):
+    with pytest.raises(ValueError, match="Redirection target escapes the working directory"):
         await handler.setup_redirects(redirects, str(tmp_path))
 
 
