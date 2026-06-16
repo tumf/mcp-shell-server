@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+- Replaced shell-string subprocess execution with argv-based `create_subprocess_exec()` for normal commands and pipelines.
+- Hardened `ALLOW_PATTERNS` to use full command-name matching and reject unsafe shell metacharacter forms.
+- Rejected default exec-capable bypass vectors including shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, and `tar --checkpoint-action=exec`.
+- Enforced redirection containment under the validated working directory before file open side effects.
+- Isolated child process environments from parent secrets unless variables are explicitly allowlisted.
+- Added default/max timeout handling, output byte caps, and structured redacted audit logging.
+
 ## [1.0.3] - 2024-12-23
 
 ### Added

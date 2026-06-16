@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import tempfile
 from unittest.mock import AsyncMock
@@ -933,22 +934,11 @@ async def test_execute_with_custom_env(
 ):
     """Test command execution with custom environment variables"""
     clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "env,printenv")
+    monkeypatch.setenv("ALLOW_COMMANDS", "printenv")
 
     custom_env = {"TEST_VAR1": "test_value1", "TEST_VAR2": "test_value2"}
 
-    # Test env command
-    mock_process_manager.execute_with_timeout.return_value = (
-        b"TEST_VAR1=test_value1\nTEST_VAR2=test_value2\n",
-        b"",
-    )
-    result = await shell_executor_with_mock.execute(
-        ["env"], directory=temp_test_dir, envs=custom_env
-    )
-    assert "TEST_VAR1=test_value1" in result["stdout"]
-    assert "TEST_VAR2=test_value2" in result["stdout"]
-
-    # Test specific variable - Update mock for printenv command
+    # Test specific variable without allowing the dangerous `env` command.
     mock_process_manager.execute_with_timeout.return_value = (b"test_value1\n", b"")
     result = await shell_executor_with_mock.execute(
         ["printenv", "TEST_VAR1"], directory=temp_test_dir, envs=custom_env
@@ -965,22 +955,17 @@ async def test_execute_env_override(
 ):
     """Test that custom environment variables override system variables"""
     clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "env")
+    monkeypatch.setenv("ALLOW_COMMANDS", "printenv")
     monkeypatch.setenv("TEST_VAR", "original_value")
 
-    # Mock env command with new environment variable
-    mock_process_manager.execute_with_timeout.return_value = (
-        b"TEST_VAR=new_value\n",
-        b"",
-    )
+    # Mock printenv command with explicit environment variable override.
+    mock_process_manager.execute_with_timeout.return_value = (b"new_value\n", b"")
 
-    # Override system environment variable
     result = await shell_executor_with_mock.execute(
-        ["env"], directory=temp_test_dir, envs={"TEST_VAR": "new_value"}
+        ["printenv", "TEST_VAR"], directory=temp_test_dir, envs={"TEST_VAR": "new_value"}
     )
 
-    assert "TEST_VAR=new_value" in result["stdout"]
-    assert "TEST_VAR=original_value" not in result["stdout"]
+    assert result["stdout"].strip() == "new_value"
 
 
 @pytest.mark.asyncio
@@ -994,17 +979,58 @@ async def test_execute_with_empty_env(
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "env")
 
-    # Mock env command with system environment
-    mock_process_manager.execute_with_timeout.return_value = (
-        b"PATH=/usr/bin\nHOME=/home/user\n",
-        b"",
-    )
-
     result = await shell_executor_with_mock.execute(
         ["env"], directory=temp_test_dir, envs={}
     )
 
-    # Command should still work with system environment
+    assert result["error"] == "Command rejected by default security policy: env"
+    assert result["status"] == 1
+
+
+@pytest.mark.asyncio
+async def test_audit_logging_success_and_secret_redaction(
+    shell_executor_with_mock,
+    mock_process_manager,
+    temp_test_dir,
+    monkeypatch,
+    caplog,
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+    mock_process_manager.execute_with_timeout.return_value = (b"ok\n", b"")
+
+    caplog.set_level(logging.INFO, logger="mcp-shell-server.audit")
+    result = await shell_executor_with_mock.execute(
+        ["echo", "SECRET_TOKEN=super-secret"], temp_test_dir, timeout=3
+    )
+
     assert result["error"] is None
-    assert result["status"] == 0
-    assert len(result["stdout"]) > 0
+    audit_records = [record.audit for record in caplog.records if hasattr(record, "audit")]
+    assert audit_records
+    audit = audit_records[-1]
+    assert audit["result_type"] == "success"
+    assert audit["argv"] == ["echo", "[REDACTED]"]
+    assert audit["timeout"] == 3
+    assert audit["stdout_bytes"] == 2
+    assert audit["return_code"] == 0
+
+
+@pytest.mark.asyncio
+async def test_audit_logging_rejection(
+    shell_executor_with_mock,
+    mock_process_manager,
+    temp_test_dir,
+    monkeypatch,
+    caplog,
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
+
+    caplog.set_level(logging.INFO, logger="mcp-shell-server.audit")
+    result = await shell_executor_with_mock.execute(["rm"], temp_test_dir, timeout=3)
+
+    assert result["status"] == 1
+    audit_records = [record.audit for record in caplog.records if hasattr(record, "audit")]
+    assert audit_records[-1]["result_type"] == "rejected"
+    assert audit_records[-1]["command"] == "rm"
+    mock_process_manager.create_process.assert_not_awaited()

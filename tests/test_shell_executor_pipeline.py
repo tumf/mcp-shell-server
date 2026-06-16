@@ -101,3 +101,75 @@ async def test_pipeline_cleanup_and_timeouts(
 
     # Verify cleanup was called
     mock_process_manager.cleanup_processes.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_preserves_full_argv_segments(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
+    """Pipeline execution passes argv segments with arguments to ProcessManager."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep")
+    mock_process_manager.execute_pipeline.return_value = (b"hello\n", b"", 0)
+
+    result = await shell_executor_with_mock.execute(
+        ["echo", "hello", "|", "grep", "h"],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["error"] is None
+    mock_process_manager.execute_pipeline.assert_awaited_once()
+    assert mock_process_manager.execute_pipeline.await_args.args[0] == [
+        ["echo", "hello"],
+        ["grep", "h"],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_rejects_metacharacter_injected_command(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
+    """Metacharacters embedded in a pipeline command name are rejected pre-exec."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "cat,ls")
+
+    result = await shell_executor_with_mock.execute(
+        ["ls; touch /tmp/pwned", "|", "cat"],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["status"] == 1
+    assert "Unsafe command name" in result["error"]
+    mock_process_manager.execute_pipeline.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_success_real_execution(temp_test_dir, monkeypatch):
+    """Normal argv-based pipeline succeeds without shell interpretation."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,grep")
+    executor = ShellExecutor()
+
+    result = await executor.execute(
+        ["echo", "hello", "|", "grep", "h"], directory=temp_test_dir, timeout=5
+    )
+
+    assert result["error"] is None
+    assert result["stdout"].strip() == "hello"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_metacharacter_injection_rejected_without_side_effect(
+    temp_test_dir, monkeypatch
+):
+    """Metacharacter-bearing command names are rejected and not shell-executed."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls,cat")
+    marker = os.path.join(temp_test_dir, "pwned")
+    executor = ShellExecutor()
+
+    result = await executor.execute(
+        [f"ls; touch {marker}", "|", "cat"], directory=temp_test_dir, timeout=5
+    )
+
+    assert result["status"] == 1
+    assert "Unsafe command name" in result["error"]
+    assert not os.path.exists(marker)

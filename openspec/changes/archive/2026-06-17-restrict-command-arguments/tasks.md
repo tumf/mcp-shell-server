@@ -1,0 +1,11 @@
+## Implementation Tasks
+
+- [x] Add default dangerous-command and dangerous-argument rejection rules in `src/mcp_shell_server/command_validator.py`. Completion condition: validation rejects the GHSA bypass vectors before any subprocess is created. (verification: unit - `tests/test_command_validator.py` covers `find -exec`, shell/interpreter names, `awk system()`, `tar --checkpoint-action=exec`, `xargs`, and `env`; ran `uv run --extra test pytest tests/test_command_validator.py`.)
+
+- [x] Wire enhanced argument validation into `src/mcp_shell_server/shell_executor.py` for single-command and pipeline segments. Completion condition: both execution paths call the same full-argv policy before process creation. (verification: integration - `tests/test_shell_executor.py` proves rejected commands return errors and process-manager mocks are not called; ran `uv run --extra test pytest tests/test_shell_executor.py tests/test_shell_executor_pipeline.py`.)
+
+- [x] Document that `ALLOW_COMMANDS` is not a sandbox for exec-capable binaries. Completion condition: `README.md` security section warns against allowing exec-capable tools without explicit policy. (verification: manual - runnable command `python -c "from pathlib import Path; assert 'not a sandbox' in Path('README.md').read_text()"` checks `README.md` security guidance.)
+
+## Final Validation
+
+Archive validation itself is the authoritative final OpenSpec validation gate. Expected archive gate: `cflx openspec validate restrict-command-arguments --archive-gate`.

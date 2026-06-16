@@ -32,7 +32,7 @@ async def test_start_process_sets_is_running(process_manager):
     """Test that start_process sets is_running attribute correctly."""
     mock_proc = create_mock_process()
     with patch(
-        "mcp_shell_server.process_manager.asyncio.create_subprocess_shell",
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
         return_value=mock_proc,
     ):
@@ -56,7 +56,7 @@ async def test_start_process_async_sets_is_running(process_manager):
     """Test that start_process_async sets is_running attribute correctly."""
     mock_proc = create_mock_process()
     with patch(
-        "mcp_shell_server.process_manager.asyncio.create_subprocess_shell",
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
         return_value=mock_proc,
     ):
@@ -125,13 +125,13 @@ async def test_execute_with_timeout_generic_exception(process_manager):
 
 @pytest.mark.asyncio
 async def test_create_process_unexpected_exception():
-    """Test that unexpected exceptions in create_subprocess_shell are converted to ValueError."""
+    """Test that unexpected exceptions in create_subprocess_exec are converted to ValueError."""
     process_manager = ProcessManager()
 
-    # Mock asyncio.create_subprocess_shell to raise an unexpected exception
+    # Mock asyncio.create_subprocess_exec to raise an unexpected exception
     unexpected_error = RuntimeError("Unexpected system error")
     with patch(
-        "mcp_shell_server.process_manager.asyncio.create_subprocess_shell",
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
         side_effect=unexpected_error,
     ):
@@ -171,7 +171,7 @@ async def test_execute_pipeline_last_stdout_handle(process_manager):
 
                 # Execute pipeline with IO handle
                 stdout, stderr, returncode = await process_manager.execute_pipeline(
-                    ["echo test"], last_stdout=mock_io
+                    [["echo", "test"]], last_stdout=mock_io
                 )
 
                 # Verify write was called on the IO handle
@@ -207,7 +207,7 @@ async def test_execute_pipeline_empty_stderr_nonzero_return(process_manager):
 
                 # Should raise ValueError with default message
                 with pytest.raises(ValueError, match="Command failed with exit code 1"):
-                    await process_manager.execute_pipeline(["failing_command"])
+                    await process_manager.execute_pipeline([["failing_command"]])
 
 
 @pytest.mark.asyncio

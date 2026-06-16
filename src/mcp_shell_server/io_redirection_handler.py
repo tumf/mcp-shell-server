@@ -9,18 +9,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class IORedirectionHandler:
-    """Handles input/output redirection for shell commands."""
+    """Handles contained input/output redirection for argv commands."""
 
     def validate_redirection_syntax(self, command: List[str]) -> None:
-        """
-        Validate the syntax of redirection operators in the command.
-
-        Args:
-            command (List[str]): Command and its arguments including redirections
-
-        Raises:
-            ValueError: If the redirection syntax is invalid
-        """
+        """Validate the syntax of redirection operators in the command."""
         prev_token = None
         for token in command:
             if token in [">", ">>", "<"]:
@@ -33,19 +25,7 @@ class IORedirectionHandler:
     def process_redirections(
         self, command: List[str]
     ) -> Tuple[List[str], Dict[str, Union[None, str, bool]]]:
-        """
-        Process input/output redirections in the command.
-
-        Args:
-            command (List[str]): Command and its arguments including redirections
-
-        Returns:
-            Tuple[List[str], Dict[str, Any]]: Processed command without redirections and
-                                           redirection configuration
-
-        Raises:
-            ValueError: If the redirection syntax is invalid
-        """
+        """Remove redirection operators from argv and return redirect metadata."""
         self.validate_redirection_syntax(command)
 
         cmd = []
@@ -59,7 +39,6 @@ class IORedirectionHandler:
         while i < len(command):
             token = command[i]
 
-            # Output redirection
             if token in [">", ">>"]:
                 if i + 1 >= len(command):
                     raise ValueError("Missing path for output redirection")
@@ -71,7 +50,6 @@ class IORedirectionHandler:
                 i += 2
                 continue
 
-            # Input redirection
             if token == "<":
                 if i + 1 >= len(command):
                     raise ValueError("Missing path for input redirection")
@@ -148,19 +126,9 @@ class IORedirectionHandler:
         redirects: Dict[str, Union[None, str, bool]],
         directory: Optional[str] = None,
     ) -> Dict[str, Union[IO[Any], int, str, None]]:
-        """
-        Set up file handles for redirections.
-
-        Args:
-            redirects (Dict[str, Union[None, str, bool]]): Redirection configuration
-            directory (Optional[str]): Working directory for file paths
-
-        Returns:
-            Dict[str, Union[IO[Any], int, str, None]]: File handles for subprocess
-        """
+        """Set up file handles for contained redirections."""
         handles: Dict[str, Union[IO[Any], int, str, None]] = {}
 
-        # Handle input redirection
         if redirects["stdin"]:
             path = self._resolve_redirection_path(str(redirects["stdin"]), directory)
             LOGGER.info(
@@ -182,7 +150,6 @@ class IORedirectionHandler:
                 )
                 raise ValueError("Failed to open input file") from e
 
-        # Handle output redirection
         if redirects["stdout"]:
             path = self._resolve_redirection_path(str(redirects["stdout"]), directory)
             mode = "a" if redirects.get("stdout_append") else "w"
@@ -209,12 +176,7 @@ class IORedirectionHandler:
     async def cleanup_handles(
         self, handles: Dict[str, Union[IO[Any], int, None]]
     ) -> None:
-        """
-        Clean up file handles after command execution.
-
-        Args:
-            handles (Dict[str, Union[IO[Any], int, None]]): File handles to clean up
-        """
+        """Clean up file handles after command execution."""
         for key in ["stdout", "stderr"]:
             handle = handles.get(key)
             if handle and hasattr(handle, "close") and not isinstance(handle, int):
