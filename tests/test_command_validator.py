@@ -25,7 +25,7 @@ def test_get_allowed_commands(validator, monkeypatch):
 def test_is_command_allowed_with_patterns(validator, monkeypatch):
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "allowed_cmd")
-    monkeypatch.setenv("ALLOW_PATTERNS", "^cmd[0-9]+$")
+    monkeypatch.setenv("ALLOW_PATTERNS", "cmd[0-9]+")
 
     assert validator.is_command_allowed("allowed_cmd")
     assert validator.is_command_allowed("cmd123")
@@ -35,6 +35,33 @@ def test_is_command_allowed_with_patterns(validator, monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "allowed_cmd")
     assert validator.is_command_allowed("allowed_cmd")
     assert not validator.is_command_allowed("disallowed_cmd")
+
+
+def test_allow_patterns_use_fullmatch_not_prefix(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_PATTERNS", "ls")
+
+    assert validator.is_command_allowed("ls")
+    assert not validator.is_command_allowed("lsof")
+
+
+def test_allow_patterns_reject_unsafe_command_names(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_PATTERNS", ".+")
+
+    assert not validator.is_command_allowed("ls; touch /tmp/pwned")
+    assert not validator.is_command_allowed("ls -la")
+
+
+@pytest.mark.parametrize("unsafe_pattern", ["ls -la", "ls;.*"])
+def test_allow_patterns_reject_unsafe_pattern_forms(
+    validator, monkeypatch, unsafe_pattern
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_PATTERNS", unsafe_pattern)
+
+    with pytest.raises(ValueError, match="ALLOW_PATTERNS entries"):
+        validator.is_command_allowed("ls")
 
 
 def test_validate_no_shell_operators(validator):
