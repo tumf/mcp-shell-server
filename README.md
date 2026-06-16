@@ -149,6 +149,24 @@ uvx mcp-shell-server
 
 Only keys named in `MCP_SHELL_CHILD_ENV_ALLOWLIST` are forwarded. Secret-like names are treated defensively in logs and should not be allowlisted unless you intentionally want a child command to read that secret.
 
+### Structured audit logs
+
+Each command invocation emits one `mcp-shell-server.audit` log event named `shell_execution_audit`. Audit records cover successful execution, validation rejection before subprocess creation, timeout, output-cap termination, and process errors including subprocess creation failures.
+
+Audit metadata includes:
+
+* `timestamp`, `duration`, and `result_type`
+* command name and redacted `argv`
+* resolved working `directory`
+* redirection flags for stdin/stdout/stdout append
+* redacted per-call environment override metadata, when supplied
+* effective `timeout` and `output_limit`
+* `stdout_bytes` and `stderr_bytes`
+* `return_code` when available
+* `rejection_reason` or `error_type` where applicable
+
+Audit logs intentionally do **not** include raw stdout or stderr bodies. Secret-like argv and environment names or values containing markers such as `SECRET`, `TOKEN`, `PASSWORD`, `PASSWD`, `API_KEY`, `ACCESS_KEY`, `PRIVATE_KEY`, `KEY`, `CREDENTIAL`, or `AUTH` are replaced with `[REDACTED]`. Long non-numeric values are represented by a short SHA-256 digest instead of the raw value.
+
 ### Request Format
 
 ```python
