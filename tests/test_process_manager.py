@@ -1,6 +1,9 @@
 """Tests for the ProcessManager class."""
 
 import asyncio
+import os
+import shlex
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -43,6 +46,74 @@ async def test_create_process(process_manager):
         assert process == mock_proc
         assert process == mock_proc
         mock_create.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_process_uses_minimal_child_environment(
+    process_manager, monkeypatch
+):
+    """Child processes do not inherit unrelated parent environment variables."""
+    monkeypatch.setenv("SECRET_TOKEN", "parent-secret")
+    monkeypatch.setenv("UNRELATED_PARENT_VAR", "parent-value")
+    monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+    mock_proc = create_mock_process()
+
+    with patch(
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_shell",
+        new_callable=AsyncMock,
+        return_value=mock_proc,
+    ) as mock_create:
+        await process_manager.create_process("echo 'test'", directory="/tmp")
+
+    child_env = mock_create.call_args.kwargs["env"]
+    assert child_env["PATH"] == os.environ.get("PATH", os.defpath)
+    assert "SECRET_TOKEN" not in child_env
+    assert "UNRELATED_PARENT_VAR" not in child_env
+
+
+@pytest.mark.asyncio
+async def test_create_process_filters_envs_by_allowlist(process_manager, monkeypatch):
+    """Only allowlisted keys can be inherited from parent or injected via envs."""
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "TEST_VAR, PARENT_ALLOWED")
+    monkeypatch.setenv("PARENT_ALLOWED", "parent-allowed-value")
+    monkeypatch.setenv("PARENT_DISALLOWED", "parent-disallowed-value")
+    mock_proc = create_mock_process()
+
+    with patch(
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_shell",
+        new_callable=AsyncMock,
+        return_value=mock_proc,
+    ) as mock_create:
+        await process_manager.create_process(
+            "echo 'test'",
+            directory="/tmp",
+            envs={"TEST_VAR": "injected-value", "PARENT_DISALLOWED": "blocked"},
+        )
+
+    child_env = mock_create.call_args.kwargs["env"]
+    assert child_env["TEST_VAR"] == "injected-value"
+    assert child_env["PARENT_ALLOWED"] == "parent-allowed-value"
+    assert "PARENT_DISALLOWED" not in child_env
+
+
+@pytest.mark.asyncio
+async def test_child_process_cannot_observe_parent_secret_by_default(
+    process_manager, monkeypatch
+):
+    """Integration coverage: parent secret variables are absent by default."""
+    monkeypatch.setenv("SECRET_TOKEN", "parent-secret")
+    monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+
+    python = shlex.quote(sys.executable)
+    script = "import os; print(os.getenv('SECRET_TOKEN', ''))"
+    process = await process_manager.create_process(
+        f"{python} -c {shlex.quote(script)}", directory=None
+    )
+    stdout, stderr = await process_manager.execute_with_timeout(process, timeout=1)
+
+    assert stderr == b""
+    assert stdout == b"\n"
+    assert process.returncode == 0
 
 
 @pytest.mark.asyncio
