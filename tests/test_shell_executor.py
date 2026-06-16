@@ -370,7 +370,10 @@ async def test_effective_timeout_and_output_limit_reach_process_manager(
     mock_process_manager.create_process.assert_awaited()
     mock_process_manager.execute_with_timeout.assert_awaited_once()
     assert mock_process_manager.execute_with_timeout.await_args.kwargs["timeout"] == 17
-    assert mock_process_manager.execute_with_timeout.await_args.kwargs["output_limit"] == 256
+    assert (
+        mock_process_manager.execute_with_timeout.await_args.kwargs["output_limit"]
+        == 256
+    )
 
 
 @pytest.mark.asyncio
@@ -1011,7 +1014,9 @@ async def test_execute_env_override(
     mock_process_manager.execute_with_timeout.return_value = (b"new_value\n", b"")
 
     result = await shell_executor_with_mock.execute(
-        ["printenv", "TEST_VAR"], directory=temp_test_dir, envs={"TEST_VAR": "new_value"}
+        ["printenv", "TEST_VAR"],
+        directory=temp_test_dir,
+        envs={"TEST_VAR": "new_value"},
     )
 
     assert result["stdout"].strip() == "new_value"
@@ -1054,7 +1059,9 @@ async def test_audit_logging_success_and_secret_redaction(
     )
 
     assert result["error"] is None
-    audit_records = [record.audit for record in caplog.records if hasattr(record, "audit")]
+    audit_records = [
+        record.audit for record in caplog.records if hasattr(record, "audit")
+    ]
     assert audit_records
     audit = audit_records[-1]
     assert audit["result_type"] == "success"
@@ -1079,7 +1086,9 @@ async def test_audit_logging_rejection(
     result = await shell_executor_with_mock.execute(["rm"], temp_test_dir, timeout=3)
 
     assert result["status"] == 1
-    audit_records = [record.audit for record in caplog.records if hasattr(record, "audit")]
+    audit_records = [
+        record.audit for record in caplog.records if hasattr(record, "audit")
+    ]
     assert audit_records[-1]["result_type"] == "rejected"
     assert audit_records[-1]["command"] == "rm"
     mock_process_manager.create_process.assert_not_awaited()

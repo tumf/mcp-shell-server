@@ -101,7 +101,9 @@ def test_allow_patterns_use_fullmatch_and_reject_unsafe_forms(validator, monkeyp
 
 def test_default_dangerous_exec_vectors_are_rejected(validator, monkeypatch):
     clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "find,sh,bash,python,python3,awk,tar,xargs,env")
+    monkeypatch.setenv(
+        "ALLOW_COMMANDS", "find,sh,bash,python,python3,awk,tar,xargs,env"
+    )
 
     dangerous_commands = [
         ["find", ".", "-exec", "sh", "-c", "echo pwned", ";"],
@@ -109,7 +111,7 @@ def test_default_dangerous_exec_vectors_are_rejected(validator, monkeypatch):
         ["bash", "-c", "echo pwned"],
         ["python", "-c", "print('pwned')"],
         ["python3", "-c", "print('pwned')"],
-        ["awk", "BEGIN { system(\"id\") }"],
+        ["awk", 'BEGIN { system("id") }'],
         ["tar", "--checkpoint-action=exec=sh shell.sh"],
         ["xargs", "sh", "-c", "echo pwned"],
         ["env"],
@@ -145,7 +147,7 @@ def test_dangerous_exec_capable_vectors_are_rejected(validator, monkeypatch):
         (["sh", "-c", "id"], "sh"),
         (["bash", "-c", "id"], "bash"),
         (["python", "-c", "print(1)"], "python"),
-        (["awk", "BEGIN { system(\"id\") }"], "awk system"),
+        (["awk", 'BEGIN { system("id") }'], "awk system"),
         (["tar", "--checkpoint-action=exec=sh shell.sh"], "tar checkpoint"),
         (["xargs", "sh"], "xargs"),
         (["env"], "env"),
@@ -161,10 +163,10 @@ def test_git_alias_exec_bypass_is_rejected(validator, monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "git")
 
     dangerous_commands = [
-        ["git", "-c", "alias.pwn=!sh -c \"touch marker\"", "pwn"],
-        ["git", "-calias.pwn=!sh -c \"touch marker\"", "pwn"],
+        ["git", "-c", 'alias.pwn=!sh -c "touch marker"', "pwn"],
+        ["git", '-calias.pwn=!sh -c "touch marker"', "pwn"],
         ["git", "-c", "url.alias.example=!not-an-exec-alias", "status"],
-        ["git", "-c", "Alias.pwn=!sh -c \"touch marker\"", "pwn"],
+        ["git", "-c", 'Alias.pwn=!sh -c "touch marker"', "pwn"],
     ]
 
     for command in dangerous_commands:

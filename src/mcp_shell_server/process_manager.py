@@ -193,7 +193,9 @@ class ProcessManager:
         try:
             value = int(raw)
         except ValueError:
-            logger.warning("Invalid integer configuration; using default", extra={"name": name})
+            logger.warning(
+                "Invalid integer configuration; using default", extra={"name": name}
+            )
             return default
         return value if value > 0 else default
 
@@ -378,9 +380,9 @@ class ProcessManager:
         stderr_stream = getattr(process, "stderr", None)
         stdin_stream = getattr(process, "stdin", None)
 
-        streams_are_real = isinstance(stdout_stream, asyncio.streams.StreamReader) or isinstance(
-            stderr_stream, asyncio.streams.StreamReader
-        )
+        streams_are_real = isinstance(
+            stdout_stream, asyncio.streams.StreamReader
+        ) or isinstance(stderr_stream, asyncio.streams.StreamReader)
         if not streams_are_real:
             stdout, stderr = await process.communicate(input=stdin_bytes)
             stdout = stdout or b""
@@ -501,7 +503,9 @@ class ProcessManager:
                 if process.returncode != 0:
                     error_msg = stderr.decode("utf-8", errors="replace").strip()
                     if not error_msg:
-                        error_msg = f"Command failed with exit code {process.returncode}"
+                        error_msg = (
+                            f"Command failed with exit code {process.returncode}"
+                        )
                     raise ValueError(error_msg)
 
                 if i == len(commands) - 1:

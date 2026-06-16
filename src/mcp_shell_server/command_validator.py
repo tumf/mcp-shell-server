@@ -114,7 +114,9 @@ class CommandValidator:
             raise ValueError("Command rejected by default security policy: find -exec")
 
         if cmd == "awk" and any("system(" in arg.replace(" ", "") for arg in args):
-            raise ValueError("Command rejected by default security policy: awk system()")
+            raise ValueError(
+                "Command rejected by default security policy: awk system()"
+            )
 
         if cmd == "tar" and any(
             arg == "--checkpoint-action=exec"

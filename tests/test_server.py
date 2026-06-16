@@ -424,7 +424,9 @@ async def test_environment_variables(monkeypatch, temp_test_dir):
     """The default security policy rejects env even when allowlisted."""
     setup_mock_subprocess(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "env")
-    with pytest.raises(RuntimeError, match="Command rejected by default security policy: env"):
+    with pytest.raises(
+        RuntimeError, match="Command rejected by default security policy: env"
+    ):
         await call_tool(
             "shell_execute",
             {"command": ["env"], "directory": temp_test_dir},

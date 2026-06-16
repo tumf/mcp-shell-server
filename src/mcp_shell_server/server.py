@@ -31,7 +31,9 @@ def _positive_int_from_env(name: str, default: int) -> int:
     try:
         value = int(raw)
     except ValueError:
-        logger.warning("Invalid integer environment configuration", extra={"name": name})
+        logger.warning(
+            "Invalid integer environment configuration", extra={"name": name}
+        )
         return default
     return value if value > 0 else default
 
@@ -70,7 +72,8 @@ class ExecuteToolHandler:
     def get_allowed_patterns(self) -> list[str]:
         """Get the allowed regex patterns."""
         return [
-            pattern.pattern for pattern in self.executor.validator._get_allowed_patterns()
+            pattern.pattern
+            for pattern in self.executor.validator._get_allowed_patterns()
         ]
 
     def _effective_timeout(self, timeout: Any) -> int:

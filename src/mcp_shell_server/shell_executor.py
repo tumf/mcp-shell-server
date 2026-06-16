@@ -143,8 +143,12 @@ class ShellExecutor:
             "env": self._redact_envs(envs),
             "timeout": timeout,
             "output_limit": output_limit,
-            "stdout_bytes": stdout_bytes if stdout_bytes is not None else len(stdout.encode()),
-            "stderr_bytes": stderr_bytes if stderr_bytes is not None else len(stderr.encode()),
+            "stdout_bytes": (
+                stdout_bytes if stdout_bytes is not None else len(stdout.encode())
+            ),
+            "stderr_bytes": (
+                stderr_bytes if stderr_bytes is not None else len(stderr.encode())
+            ),
             "return_code": return_code,
             "duration": time.time() - start_time,
             "result_type": result_type,
@@ -291,7 +295,11 @@ class ShellExecutor:
                     stdin = stdin_data
 
                 stdout_value = handles.get("stdout")
-                if isinstance(stdout_value, int) or isinstance(stdout_value, io.IOBase) or hasattr(stdout_value, "write"):
+                if (
+                    isinstance(stdout_value, int)
+                    or isinstance(stdout_value, io.IOBase)
+                    or hasattr(stdout_value, "write")
+                ):
                     stdout_handle = stdout_value
             except ValueError as e:
                 self._audit(
@@ -310,10 +318,16 @@ class ShellExecutor:
 
             try:
                 process = await self.process_manager.create_process(
-                    cmd, directory, stdout_handle=stdout_handle, envs=envs, timeout=timeout
+                    cmd,
+                    directory,
+                    stdout_handle=stdout_handle,
+                    envs=envs,
+                    timeout=timeout,
                 )
             except Exception as e:
-                if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
+                if hasattr(stdout_handle, "close") and not isinstance(
+                    stdout_handle, int
+                ):
                     stdout_handle.close()
                 self._audit(
                     "process_error",
@@ -340,13 +354,17 @@ class ShellExecutor:
                     )
                 )
 
-                if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
+                if hasattr(stdout_handle, "close") and not isinstance(
+                    stdout_handle, int
+                ):
                     try:
                         stdout_handle.close()
                     except (IOError, OSError) as e:
                         logging.warning(f"Error closing stdout: {e}")
 
-                final_returncode = 0 if process.returncode is None else process.returncode
+                final_returncode = (
+                    0 if process.returncode is None else process.returncode
+                )
                 stdout_text = stdout.decode(errors="replace").strip() if stdout else ""
                 stderr_text = stderr.decode(errors="replace").strip() if stderr else ""
                 self._audit(
@@ -381,7 +399,9 @@ class ShellExecutor:
                     except ProcessLookupError:
                         pass
 
-                if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
+                if hasattr(stdout_handle, "close") and not isinstance(
+                    stdout_handle, int
+                ):
                     stdout_handle.close()
 
                 message = f"Command timed out after {timeout} seconds"
@@ -394,13 +414,15 @@ class ShellExecutor:
                     timeout=timeout,
                     output_limit=output_limit,
                     return_code=-1,
-                     redirections=redirection_metadata,
-                     envs=envs,
-                     error_type="TimeoutError",
-                 )
+                    redirections=redirection_metadata,
+                    envs=envs,
+                    error_type="TimeoutError",
+                )
                 return self._error_result(message, start_time, status=-1)
             except OutputLimitExceeded as e:
-                if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
+                if hasattr(stdout_handle, "close") and not isinstance(
+                    stdout_handle, int
+                ):
                     stdout_handle.close()
                 message = str(e)
                 self._audit(
@@ -420,7 +442,9 @@ class ShellExecutor:
                 )
                 return self._error_result(message, start_time, status=-1)
             except Exception as e:
-                if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
+                if hasattr(stdout_handle, "close") and not isinstance(
+                    stdout_handle, int
+                ):
                     stdout_handle.close()
                 self._audit(
                     "process_error",
@@ -472,33 +496,51 @@ class ShellExecutor:
                     last_redirects = redirects
 
             if first_redirects:
-                handles = await self.io_handler.setup_redirects(first_redirects, directory)
+                handles = await self.io_handler.setup_redirects(
+                    first_redirects, directory
+                )
                 stdin_data = handles.get("stdin_data")
                 if stdin_data:
-                    first_stdin = stdin_data.encode() if isinstance(stdin_data, str) else None
+                    first_stdin = (
+                        stdin_data.encode() if isinstance(stdin_data, str) else None
+                    )
                 redirection_metadata["stdin"] = bool(first_redirects.get("stdin"))
 
             if last_redirects:
-                handles = await self.io_handler.setup_redirects(last_redirects, directory)
+                handles = await self.io_handler.setup_redirects(
+                    last_redirects, directory
+                )
                 stdout_value = handles.get("stdout")
-                if isinstance(stdout_value, int) or isinstance(stdout_value, io.IOBase) or hasattr(stdout_value, "write"):
+                if (
+                    isinstance(stdout_value, int)
+                    or isinstance(stdout_value, io.IOBase)
+                    or hasattr(stdout_value, "write")
+                ):
                     pipeline_stdout = stdout_value
                 redirection_metadata["stdout"] = bool(last_redirects.get("stdout"))
-                redirection_metadata["stdout_append"] = bool(last_redirects.get("stdout_append"))
-
-            try:
-                stdout, stderr, returncode = await self.process_manager.execute_pipeline(
-                    parsed_commands,
-                    first_stdin=first_stdin,
-                    last_stdout=pipeline_stdout,
-                    directory=directory,
-                    timeout=timeout,
-                    envs=envs,
-                    output_limit=output_limit,
+                redirection_metadata["stdout_append"] = bool(
+                    last_redirects.get("stdout_append")
                 )
 
-                final_output = stdout.decode("utf-8", errors="replace") if stdout else ""
-                final_stderr = stderr.decode("utf-8", errors="replace") if stderr else ""
+            try:
+                stdout, stderr, returncode = (
+                    await self.process_manager.execute_pipeline(
+                        parsed_commands,
+                        first_stdin=first_stdin,
+                        last_stdout=pipeline_stdout,
+                        directory=directory,
+                        timeout=timeout,
+                        envs=envs,
+                        output_limit=output_limit,
+                    )
+                )
+
+                final_output = (
+                    stdout.decode("utf-8", errors="replace") if stdout else ""
+                )
+                final_stderr = (
+                    stderr.decode("utf-8", errors="replace") if stderr else ""
+                )
                 self._audit(
                     "success",
                     [part for cmd in parsed_commands for part in [*cmd, "|"]][:-1],
@@ -542,7 +584,9 @@ class ShellExecutor:
                 return self._error_result(message, start_time, status=-1)
             except Exception as e:
                 await self.process_manager.cleanup_processes([])
-                result_type = "timeout" if isinstance(e, TimeoutError) else "process_error"
+                result_type = (
+                    "timeout" if isinstance(e, TimeoutError) else "process_error"
+                )
                 self._audit(
                     result_type,
                     commands[0] if commands else [],

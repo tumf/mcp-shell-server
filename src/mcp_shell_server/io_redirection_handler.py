@@ -76,11 +76,15 @@ class IORedirectionHandler:
                 "Rejected absolute redirection target",
                 extra={"target": target, "directory": directory},
             )
-            raise ValueError("Redirection target must be relative to the working directory")
+            raise ValueError(
+                "Redirection target must be relative to the working directory"
+            )
 
         raw_parts = target.split(os.sep)
         if os.path.altsep:
-            raw_parts = [part for value in raw_parts for part in value.split(os.path.altsep)]
+            raw_parts = [
+                part for value in raw_parts for part in value.split(os.path.altsep)
+            ]
         if ".." in raw_parts:
             LOGGER.warning(
                 "Rejected parent-traversal redirection target",

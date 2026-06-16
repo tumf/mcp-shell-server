@@ -115,7 +115,9 @@ async def test_setup_errors(handler, tmp_path):
         "stdout": "/tmp/output.txt",
         "stdout_append": False,
     }
-    with pytest.raises(ValueError, match="Redirection target must be relative to the working directory"):
+    with pytest.raises(
+        ValueError, match="Redirection target must be relative to the working directory"
+    ):
         await handler.setup_redirects(redirects, str(tmp_path))
 
 
@@ -129,14 +131,19 @@ async def test_input_redirection_rejects_absolute_path_before_open(handler, tmp_
     }
 
     with patch("builtins.open") as mock_open:
-        with pytest.raises(ValueError, match="Redirection target must be relative to the working directory"):
+        with pytest.raises(
+            ValueError,
+            match="Redirection target must be relative to the working directory",
+        ):
             await handler.setup_redirects(redirects, str(tmp_path))
 
     mock_open.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_input_redirection_rejects_parent_traversal_before_open(handler, tmp_path):
+async def test_input_redirection_rejects_parent_traversal_before_open(
+    handler, tmp_path
+):
     """Parent traversal input targets are rejected before file open."""
     redirects = {
         "stdin": "../secret.txt",
@@ -152,7 +159,9 @@ async def test_input_redirection_rejects_parent_traversal_before_open(handler, t
 
 
 @pytest.mark.asyncio
-async def test_output_redirection_rejects_parent_traversal_before_open(handler, tmp_path):
+async def test_output_redirection_rejects_parent_traversal_before_open(
+    handler, tmp_path
+):
     """Parent traversal output targets are rejected before truncating files."""
     outside_file = tmp_path.parent / "outside.txt"
     outside_file.write_text("keep me", encoding="utf-8")
@@ -213,7 +222,9 @@ async def test_valid_in_directory_input_redirection_reads_file(handler, tmp_path
 
 
 @pytest.mark.asyncio
-async def test_output_redirection_rejects_symlink_escape_before_truncate(handler, tmp_path):
+async def test_output_redirection_rejects_symlink_escape_before_truncate(
+    handler, tmp_path
+):
     """Symlink output targets outside directory are rejected before truncation."""
     outside_file = tmp_path.parent / "outside-output.txt"
     outside_file.write_text("keep me", encoding="utf-8")
@@ -257,7 +268,9 @@ async def test_shell_executor_rejects_escaped_output_without_modifying_file(
 
 
 @pytest.mark.asyncio
-async def test_shell_executor_writes_and_appends_inside_directory(tmp_path, monkeypatch):
+async def test_shell_executor_writes_and_appends_inside_directory(
+    tmp_path, monkeypatch
+):
     """Valid > and >> redirections write contained files and return metadata."""
     monkeypatch.setenv("ALLOW_COMMANDS", "printf")
     output_file = tmp_path / "result.txt"
@@ -310,12 +323,16 @@ async def test_symlink_escape_rejected(handler, tmp_path):
     os.symlink(outside_file, link)
     redirects = {"stdin": "link.txt", "stdout": None, "stdout_append": False}
 
-    with pytest.raises(ValueError, match="Redirection target escapes the working directory"):
+    with pytest.raises(
+        ValueError, match="Redirection target escapes the working directory"
+    ):
         await handler.setup_redirects(redirects, str(tmp_path))
 
 
 @pytest.mark.asyncio
-async def test_shell_executor_redirect_writes_stay_inside_directory(tmp_path, monkeypatch):
+async def test_shell_executor_redirect_writes_stay_inside_directory(
+    tmp_path, monkeypatch
+):
     """Real executor writes only to relative paths in the working directory."""
     monkeypatch.setenv("ALLOW_COMMANDS", "echo,cat")
     executor = ShellExecutor()
