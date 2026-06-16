@@ -127,6 +127,28 @@ ALLOWED_COMMANDS="ls ,echo, cat"      # With spaces (using alias)
 ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
 ```
 
+`ALLOW_PATTERNS` can be used for comma-separated regular expressions that match command names. Each pattern is applied with full-match semantics, so `ALLOW_PATTERNS="ls"` allows only the command name `ls` and does not allow `lsof` or `ls -la`. Patterns and command names containing whitespace or shell metacharacters are rejected; do not use `ALLOW_PATTERNS` to describe shell command strings or argument-level policies.
+
+```bash
+ALLOW_PATTERNS="python[0-9.]*,node"    # Command-name patterns only
+```
+
+### Child process environment
+
+Commands run with an isolated child environment. The server does **not** pass the full parent process environment to child commands, so unrelated variables such as API tokens, credentials, and `SECRET_TOKEN` are absent by default.
+
+By default the child environment contains only the minimal launch keys needed for command execution: `PATH` on POSIX systems, plus Windows process-launch keys when applicable (`COMSPEC`, `PATHEXT`, `SYSTEMROOT`, and `WINDIR`).
+
+Use `MCP_SHELL_CHILD_ENV_ALLOWLIST` to explicitly allow additional environment variable names to be inherited from the parent process or accepted from per-command environment overrides. The allowlist is comma-separated and uses exact environment variable names:
+
+```bash
+MCP_SHELL_CHILD_ENV_ALLOWLIST="LANG,LC_ALL,MY_TOOL_HOME" \
+ALLOW_COMMANDS="printenv,my-tool" \
+uvx mcp-shell-server
+```
+
+Only keys named in `MCP_SHELL_CHILD_ENV_ALLOWLIST` are forwarded. Secret-like names are treated defensively in logs and should not be allowlisted unless you intentionally want a child command to read that secret.
+
 ### Request Format
 
 ```python

@@ -38,6 +38,114 @@ class OutputLimitExceeded(RuntimeError):
         super().__init__(f"{stream_name} exceeded output limit of {limit} bytes")
 
 
+CHILD_ENV_ALLOWLIST_VAR = "MCP_SHELL_CHILD_ENV_ALLOWLIST"
+DEFAULT_CHILD_ENV_KEYS = ("PATH",)
+WINDOWS_CHILD_ENV_KEYS = ("COMSPEC", "PATHEXT", "SYSTEMROOT", "WINDIR")
+SECRET_LIKE_ENV_NAME_PARTS = (
+    "SECRET",
+    "TOKEN",
+    "PASSWORD",
+    "PASSWD",
+    "API_KEY",
+    "ACCESS_KEY",
+    "PRIVATE_KEY",
+    "CREDENTIAL",
+    "AUTH",
+)
+
+
+def _is_valid_env_key(key: str) -> bool:
+    """Return True when key is safe to use as an environment variable name."""
+    return bool(key) and all(char.isalnum() or char == "_" for char in key)
+
+
+def _is_secret_like_env_key(key: str) -> bool:
+    """Return True when key metadata appears likely to refer to a secret."""
+    normalized = key.upper()
+    return any(part in normalized for part in SECRET_LIKE_ENV_NAME_PARTS)
+
+
+def _redact_env_key_for_log(key: str) -> str:
+    """Redact secret-like environment names from logs."""
+    if _is_secret_like_env_key(key):
+        return "<redacted-secret-like-env-name>"
+    return key
+
+
+def _parse_env_key_list(value: Optional[str]) -> Set[str]:
+    """Parse a comma-separated environment key list using strict key validation."""
+    if not value:
+        return set()
+
+    parsed: Set[str] = set()
+    for raw_key in value.split(","):
+        key = raw_key.strip()
+        if not key:
+            continue
+        if not _is_valid_env_key(key):
+            logging.warning(
+                "Ignoring invalid child environment allowlist key: %s",
+                _redact_env_key_for_log(key),
+            )
+            continue
+        parsed.add(key)
+    return parsed
+
+
+def build_child_environment(envs: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """Build the minimal, allowlist-controlled environment for child processes.
+
+    Child processes intentionally do not inherit ``os.environ`` wholesale. The
+    default environment contains only documented runtime keys required for basic
+    command lookup. Additional keys are inherited from the parent or supplied via
+    ``envs`` only when named in ``MCP_SHELL_CHILD_ENV_ALLOWLIST``.
+    """
+    child_env: Dict[str, str] = {}
+
+    if "PATH" in os.environ:
+        child_env["PATH"] = os.environ["PATH"]
+    else:
+        child_env["PATH"] = os.defpath
+
+    if os.name == "nt":
+        for key in WINDOWS_CHILD_ENV_KEYS:
+            value = os.environ.get(key)
+            if value is not None:
+                child_env[key] = value
+
+    allowlisted_keys = _parse_env_key_list(os.environ.get(CHILD_ENV_ALLOWLIST_VAR))
+    for key in allowlisted_keys:
+        parent_value = os.environ.get(key)
+        if parent_value is not None:
+            child_env[key] = parent_value
+
+    if not envs:
+        return child_env
+
+    invalid_keys = [key for key in envs if not _is_valid_env_key(key)]
+    if invalid_keys:
+        logging.warning(
+            "Ignoring invalid child environment keys: %s",
+            ",".join(_redact_env_key_for_log(key) for key in sorted(invalid_keys)),
+        )
+
+    disallowed_keys = [
+        key for key in envs if _is_valid_env_key(key) and key not in allowlisted_keys
+    ]
+    if disallowed_keys:
+        logging.info(
+            "Ignoring child environment keys not present in %s: %s",
+            CHILD_ENV_ALLOWLIST_VAR,
+            ",".join(_redact_env_key_for_log(key) for key in sorted(disallowed_keys)),
+        )
+
+    for key in allowlisted_keys:
+        if key in envs and _is_valid_env_key(key):
+            child_env[key] = envs[key]
+
+    return child_env
+
+
 class ProcessManager:
     """Manages process creation, execution, and cleanup for argv commands."""
 
@@ -189,10 +297,12 @@ class ProcessManager:
 
         The public execution path passes argv lists; string input is split only for
         backward-compatible internal tests and is never handed to a shell.
+        Additional envs are forwarded only when they are listed in
+        MCP_SHELL_CHILD_ENV_ALLOWLIST.
         """
         del stdin, timeout
         normalized_argv = self._normalize_argv(argv)
-        child_env = self.build_child_environment(envs)
+        child_env = build_child_environment(envs)
         logger.debug(
             "creating subprocess",
             extra={
