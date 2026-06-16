@@ -80,3 +80,65 @@ def test_validate_command(validator, monkeypatch):
 
     # Command allowed
     validator.validate_command(["allowed_cmd", "-arg"])  # Should not raise
+
+
+def test_rejects_find_exec_even_when_allowlisted(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "find")
+
+    with pytest.raises(ValueError, match="find -exec"):
+        validator.validate_command(["find", ".", "-exec", "sh", "-c", "id", ";"])
+
+
+def test_rejects_shells_and_interpreters_even_when_allowlisted(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv(
+        "ALLOW_COMMANDS",
+            "sh,/bin/bash,zsh,python,python3.12,perl,ruby,node,env,xargs",
+
+    )
+
+    for command in [
+        "sh",
+        "/bin/bash",
+        "zsh",
+        "python",
+        "python3.12",
+        "perl",
+        "ruby",
+        "node",
+        "env",
+        "xargs",
+    ]:
+        with pytest.raises(ValueError, match="default argument policy"):
+            validator.validate_command([command, "--version"])
+
+
+def test_rejects_awk_system_call_but_allows_plain_awk(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "awk")
+
+    validator.validate_command(["awk", "{ print $1 }"])
+
+    with pytest.raises(ValueError, match=r"awk system\(\)"):
+        validator.validate_command(["awk", "BEGIN { system(\"id\") }"])
+
+
+def test_rejects_tar_checkpoint_action_exec(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "tar")
+
+    validator.validate_command(["tar", "-cf", "archive.tar", "file.txt"])
+
+    with pytest.raises(ValueError, match="tar --checkpoint-action=exec"):
+        validator.validate_command(
+            ["tar", "--checkpoint=1", "--checkpoint-action=exec=sh exploit.sh"]
+        )
+
+
+def test_validate_pipeline_rejects_dangerous_segment(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "cat,xargs")
+
+    with pytest.raises(ValueError, match="default argument policy"):
+        validator.validate_pipeline(["cat", "items.txt", "|", "xargs", "sh", "-c"])

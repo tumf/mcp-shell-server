@@ -429,10 +429,10 @@ async def test_shell_startup(monkeypatch, temp_test_dir):
 async def test_environment_variables(monkeypatch, temp_test_dir):
     """Test to check environment variables during test execution"""
     setup_mock_subprocess(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "env")
+    monkeypatch.setenv("ALLOW_COMMANDS", "printenv")
     result = await call_tool(
         "shell_execute",
-        {"command": ["env"], "directory": temp_test_dir},
+        {"command": ["printenv"], "directory": temp_test_dir},
     )
     assert len(result) == 1
 
