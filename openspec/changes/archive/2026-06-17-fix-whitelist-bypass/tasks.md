@@ -6,7 +6,7 @@
 
 - [x] Keep existing advisory regression coverage passing; completion condition: existing `find -exec`, interpreter, `awk system()`, `tar --checkpoint-action=exec`, `env`, and `xargs` rejection tests still pass (xargs is already covered by `DANGEROUS_COMMANDS` and requires no code change). (verification: unit - `uv run pytest tests/test_command_validator.py`.) Evidence: `uv run --extra test pytest tests/test_command_validator.py` passed (11 passed).
 
-- [x] Update security documentation if policy semantics change; completion condition: `README.md` and/or `SECURITY.md` describe that allowlisting exec-capable binaries is constrained by default argument hardening and name at least the git alias exec case. (verification: manual - inspect `README.md` / `SECURITY.md` diff for the policy note.) Evidence: `README.md` and `SECURITY.md` now document default argument hardening and the git `alias.<name>=!<cmd>` rejection.
+- [x] Update security documentation if policy semantics change; completion condition: `README.md` and/or `SECURITY.md` describe that allowlisting exec-capable binaries is constrained by default argument hardening and name at least the git alias exec case. (verification: manual - runnable command `git grep -n "git.*alias" README.md SECURITY.md`.) Evidence: `git grep -n "git.*alias" README.md SECURITY.md` returned `README.md:136`, `SECURITY.md:25`.
 
 ## Future Work
 
