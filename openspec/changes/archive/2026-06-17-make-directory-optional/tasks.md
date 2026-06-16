@@ -8,7 +8,7 @@
 
 - [x] Preserve redirection containment under the effective directory. Completion condition: relative redirection paths inside the effective directory are allowed and `../` or symlink escapes outside that effective directory remain rejected when `directory` is omitted or relative. (verification: integration - add `tests/test_shell_executor_redirections.py` cases using `tmp_path` real files/symlinks)
 
-- [x] Update README usage documentation for optional `directory`. Completion condition: `README.md` states omitted `directory` uses the MCP server process CWD, relative `directory` is resolved from that same CWD, and this is not the MCP client CWD. (verification: manual - `README.md`; run `rg "server process.*CWD|MCP client CWD|relative.*directory" README.md`)
+- [x] Update README usage documentation for optional `directory`. Completion condition: `README.md` states omitted `directory` uses the MCP server process CWD, relative `directory` is resolved from that same CWD, and this is not the MCP client CWD. (verification: manual - runnable command: `rg "server process.*CWD|MCP client CWD|relative.*directory" README.md`) 。後続の archive gate が参照するため、実装には触れず検証証跡の表記だけを repository-verifiable 形式に正規化した。
 
 - [x] Run the project verification suite for this change. Completion condition: relevant unit/integration tests pass and default quality checks configured by the repository pass. (verification: manual - run `pytest tests/test_server.py tests/test_server_validation.py tests/test_shell_executor_redirections.py` plus discovered lint/typecheck commands)
 
