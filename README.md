@@ -229,7 +229,7 @@ The server implements several security measures, but it is not an OS sandbox. A 
 3. **No Shell-String Execution**: Normal commands and pipelines are executed with `asyncio.create_subprocess_exec(*argv)`; user-controlled strings are not passed to a shell.
 4. **Contained Redirection**: Redirection paths must be relative to `directory`; absolute paths, `..` traversal, and symlink escapes are rejected before files are opened.
 5. **Environment Isolation**: Children receive `PATH`, `LANG`, and `LC_ALL` plus names listed in `MCP_SHELL_ENV_ALLOWLIST`. Parent secrets such as tokens are not inherited by default. Per-call `envs` values are added explicitly by the server caller.
-6. **Execution Limits**: `MCP_SHELL_DEFAULT_TIMEOUT_SECONDS` defaults to 30 seconds, `MCP_SHELL_MAX_TIMEOUT_SECONDS` defaults to 300 seconds, and `MCP_SHELL_OUTPUT_LIMIT_BYTES` defaults to 1 MiB. Client timeouts are clamped to the server maximum.
+6. **Execution Limits**: `MCP_SHELL_DEFAULT_TIMEOUT_SECONDS` defaults to 30 seconds, `MCP_SHELL_MAX_TIMEOUT_SECONDS` defaults to 300 seconds, and `MCP_SHELL_OUTPUT_LIMIT_BYTES` defaults to 1 MiB per captured stdout/stderr stream. Client timeouts are clamped to the server maximum; omitted timeouts receive the default. Processes that time out or exceed the output cap are terminated and reaped before an explicit timeout/output-cap error is returned.
 7. **Audit Logging**: Each invocation emits structured audit metadata for success, rejection, timeout, output cap, and process error outcomes. Secret-like argv values are redacted; stdout/stderr content is not logged.
 
 ### Security-related environment variables

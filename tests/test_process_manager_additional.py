@@ -1,8 +1,8 @@
 """Additional tests for the ProcessManager class to improve coverage."""
 
+import io
 import os
 import signal
-from typing import IO
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -145,8 +145,9 @@ async def test_create_process_unexpected_exception():
 @pytest.mark.asyncio
 async def test_execute_pipeline_last_stdout_handle(process_manager):
     """Test that execute_pipeline writes to IO handle when last_stdout is provided."""
-    # Create a mock IO object
-    mock_io = MagicMock(spec=IO)
+    # Create a runtime-valid mock IO object. typing.IO is not accepted by
+    # isinstance(..., io.IOBase) checks used by ProcessManager.
+    mock_io = MagicMock(spec=io.TextIOBase)
 
     # Create a mock process that succeeds
     mock_proc = create_mock_process(returncode=0)

@@ -2,6 +2,7 @@
 
 import asyncio
 import asyncio.streams
+import io
 import logging
 import os
 import shlex

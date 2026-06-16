@@ -77,12 +77,14 @@ async def test_create_process_uses_minimal_child_environment(
     mock_proc = create_mock_process()
 
     with patch(
-        "mcp_shell_server.process_manager.asyncio.create_subprocess_shell",
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
         return_value=mock_proc,
     ) as mock_create:
         await process_manager.create_process("echo 'test'", directory="/tmp")
 
+    mock_create.assert_called_once()
+    assert mock_create.call_args.args == ("echo", "test")
     child_env = mock_create.call_args.kwargs["env"]
     assert child_env["PATH"] == os.environ.get("PATH", os.defpath)
     assert "SECRET_TOKEN" not in child_env
@@ -98,7 +100,7 @@ async def test_create_process_filters_envs_by_allowlist(process_manager, monkeyp
     mock_proc = create_mock_process()
 
     with patch(
-        "mcp_shell_server.process_manager.asyncio.create_subprocess_shell",
+        "mcp_shell_server.process_manager.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
         return_value=mock_proc,
     ) as mock_create:
@@ -108,6 +110,8 @@ async def test_create_process_filters_envs_by_allowlist(process_manager, monkeyp
             envs={"TEST_VAR": "injected-value", "PARENT_DISALLOWED": "blocked"},
         )
 
+    mock_create.assert_called_once()
+    assert mock_create.call_args.args == ("echo", "test")
     child_env = mock_create.call_args.kwargs["env"]
     assert child_env["TEST_VAR"] == "injected-value"
     assert child_env["PARENT_ALLOWED"] == "parent-allowed-value"
@@ -280,6 +284,36 @@ async def test_output_limit_is_enforced_with_mocked_communicate(process_manager)
 
     assert exc_info.value.stream_name == "stdout"
     assert exc_info.value.stdout == b"abc"
+
+
+@pytest.mark.asyncio
+async def test_execute_with_timeout_terminates_real_process(process_manager):
+    """Timed-out subprocesses are terminated and reaped promptly."""
+    process = await process_manager.create_process(
+        [sys.executable, "-c", "import time; time.sleep(10)"],
+        directory=None,
+    )
+
+    with pytest.raises(asyncio.TimeoutError):
+        await process_manager.execute_with_timeout(process, timeout=0.05)
+
+    assert process.returncode is not None
+
+
+@pytest.mark.asyncio
+async def test_output_limit_terminates_real_high_output_process(process_manager):
+    """High-output subprocesses are capped without buffering full output."""
+    process = await process_manager.create_process(
+        [sys.executable, "-c", "import sys; sys.stdout.write('x' * 4096)"],
+        directory=None,
+    )
+
+    with pytest.raises(OutputLimitExceeded) as exc_info:
+        await process_manager.execute_with_timeout(process, timeout=1, output_limit=64)
+
+    assert exc_info.value.stream_name == "stdout"
+    assert exc_info.value.stdout == b"x" * 64
+    assert process.returncode is not None
 
 
 def test_child_environment_does_not_inherit_secrets(process_manager, monkeypatch):

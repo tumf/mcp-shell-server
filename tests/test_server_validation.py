@@ -60,6 +60,21 @@ async def test_server_clamps_requested_timeout(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_server_rejects_boolean_timeout():
+    handler = ExecuteToolHandler()
+    handler.executor.execute = AsyncMock(
+        return_value={"error": None, "stdout": "ok", "stderr": "", "status": 0}
+    )
+
+    with pytest.raises(ValueError, match="'timeout' must be an integer"):
+        await handler.run_tool(
+            {"command": ["echo", "ok"], "directory": "/tmp", "timeout": True}
+        )
+
+    handler.executor.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_server_applies_default_timeout(monkeypatch, tmp_path):
     """Omitted client timeout is replaced with the configured default."""
     handler = ExecuteToolHandler()

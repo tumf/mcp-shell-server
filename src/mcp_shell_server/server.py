@@ -19,6 +19,9 @@ logger = logging.getLogger("mcp-shell-server")
 app: Server = Server("mcp-shell-server")
 DEFAULT_MAX_TIMEOUT_SECONDS = 300
 DEFAULT_SERVER_OUTPUT_LIMIT_BYTES = DEFAULT_OUTPUT_LIMIT_BYTES
+DEFAULT_TIMEOUT_VAR = "MCP_SHELL_DEFAULT_TIMEOUT_SECONDS"
+MAX_TIMEOUT_VAR = "MCP_SHELL_MAX_TIMEOUT_SECONDS"
+OUTPUT_LIMIT_VAR = "MCP_SHELL_OUTPUT_LIMIT_BYTES"
 
 
 def _positive_int_from_env(name: str, default: int) -> int:
@@ -42,15 +45,22 @@ class ExecuteToolHandler:
     def __init__(self):
         self.executor = ShellExecutor()
         self.default_timeout = _positive_int_from_env(
-            "MCP_SHELL_DEFAULT_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS
+            DEFAULT_TIMEOUT_VAR, DEFAULT_TIMEOUT_SECONDS
         )
         self.max_timeout = _positive_int_from_env(
-            "MCP_SHELL_MAX_TIMEOUT_SECONDS", DEFAULT_MAX_TIMEOUT_SECONDS
+            MAX_TIMEOUT_VAR, DEFAULT_MAX_TIMEOUT_SECONDS
         )
         if self.default_timeout > self.max_timeout:
+            logger.warning(
+                "Default timeout exceeds maximum; clamping default timeout",
+                extra={
+                    "default_timeout": self.default_timeout,
+                    "max_timeout": self.max_timeout,
+                },
+            )
             self.default_timeout = self.max_timeout
         self.output_limit = _positive_int_from_env(
-            "MCP_SHELL_OUTPUT_LIMIT_BYTES", DEFAULT_SERVER_OUTPUT_LIMIT_BYTES
+            OUTPUT_LIMIT_VAR, DEFAULT_SERVER_OUTPUT_LIMIT_BYTES
         )
 
     def get_allowed_commands(self) -> list[str]:
@@ -65,12 +75,25 @@ class ExecuteToolHandler:
 
     def _effective_timeout(self, timeout: Any) -> int:
         if timeout is None:
+            logger.debug(
+                "Using default command timeout",
+                extra={"effective_timeout": self.default_timeout},
+            )
             return self.default_timeout
-        if not isinstance(timeout, int):
+        if isinstance(timeout, bool) or not isinstance(timeout, int):
             raise ValueError("'timeout' must be an integer")
         if timeout <= 0:
             raise ValueError("'timeout' must be greater than 0")
-        return min(timeout, self.max_timeout)
+        if timeout > self.max_timeout:
+            logger.info(
+                "Clamping requested command timeout to server maximum",
+                extra={
+                    "requested_timeout": timeout,
+                    "effective_timeout": self.max_timeout,
+                },
+            )
+            return self.max_timeout
+        return timeout
 
     def get_tool_description(self) -> Tool:
         """Get the tool description for the execute command."""

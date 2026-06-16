@@ -394,10 +394,10 @@ class ShellExecutor:
                     timeout=timeout,
                     output_limit=output_limit,
                     return_code=-1,
-                    redirections=redirection_metadata,
-                    envs=envs,
-                    error_type="TimeoutError",
-                )
+                     redirections=redirection_metadata,
+                     envs=envs,
+                     error_type="TimeoutError",
+                 )
                 return self._error_result(message, start_time, status=-1)
             except OutputLimitExceeded as e:
                 if hasattr(stdout_handle, "close") and not isinstance(stdout_handle, int):
