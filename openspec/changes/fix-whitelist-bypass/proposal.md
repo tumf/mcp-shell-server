@@ -18,9 +18,9 @@ references:
 
 ## Proposed Solution
 
-- `command_validator.py` の `_validate_default_argument_policy` を拡張し、許可されたバイナリでも exec-capable な引数（`git -c alias.*=!...`、`xargs sh -c` 等）をデフォルトで拒否する。
+- `command_validator.py` の `_validate_default_argument_policy` を拡張し、許可されたバイナリでも exec-capable な引数をデフォルトで拒否する。git については、`-c` 引数に続く値が `alias.` を含みかつ `=!` を後続に含む場合を `git alias exec` として拒否する（git alias の外部コマンド実行機構は `alias.<name>=!<cmd>` 形式に依存するため）。
+- `xargs` は既に `DANGEROUS_COMMANDS` で拒否済みであり、本変更では追加実装不要。
 - 拒否対象をドキュメント化し、テストで PoC をカバーする。
-- 既存 `DANGEROUS_COMMANDS` ロジックと整合させつつ、汎用的な argv 検証を追加する。
 
 ## Acceptance Criteria
 
@@ -40,3 +40,4 @@ references:
 - ユーザー定義ポリシーの完全実装（将来の拡張）。
 - 外部バイナリの静的解析（`git` の全サブコマンド走査等）。
 - 既存 `DANGEROUS_COMMANDS` 以外の新しい危険コマンドの包括的リスト作成。
+- git 以外の exec-capable binary（`curl`、`rsync -e`、`ssh`、`wget` 等）の argv 検証。これらは別提案で対処する。
