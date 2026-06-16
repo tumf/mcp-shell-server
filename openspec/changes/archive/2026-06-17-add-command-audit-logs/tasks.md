@@ -6,7 +6,7 @@
 
 - [x] Avoid logging raw command output. Completion condition: audit records include output byte counts but not raw stdout/stderr bodies. (verification: unit - `tests/test_audit_logging.py` or `tests/test_server_validation.py` asserts known stdout text is not present while byte counts are present.)
 
-- [x] Document audit behavior. Completion condition: `README.md` or `SECURITY.md` describes audit fields and redaction. (verification: manual - inspect `git diff -- README.md SECURITY.md`.)
+- [x] Document audit behavior. Completion condition: `README.md` or `SECURITY.md` describes audit fields and redaction. (verification: manual - repository evidence in `README.md` and/or `SECURITY.md`; runnable command: `git diff -- README.md SECURITY.md`.)
 
 ## Final Validation
 
