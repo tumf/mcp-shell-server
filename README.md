@@ -13,11 +13,14 @@ A secure shell command execution server implementing the Model Context Protocol 
 
 ## Features
 
-* **Secure Command Execution**: Only whitelisted commands can be executed
+* **Argv-based Command Execution**: Allowed commands run via subprocess argv without shell-string interpretation
 * **Standard Input Support**: Pass input to commands via stdin
 * **Comprehensive Output**: Returns stdout, stderr, exit status, and execution time
-* **Shell Operator Safety**: Validates commands after shell operators (; , &&, ||, |)
-* **Timeout Control**: Set maximum execution time for commands
+* **Safe Pipeline Support**: Pipelines preserve and validate argv segments instead of invoking a shell
+* **Execution Limits**: Server-side default timeout, maximum timeout, and output byte caps are enforced
+* **Contained Redirection**: `<`, `>`, and `>>` targets must stay inside the requested working directory
+* **Minimal Child Environment**: Child processes receive a small allowlisted environment instead of inheriting all server secrets
+* **Structured Audit Logging**: Success, rejection, timeout, output-cap, and process-error outcomes are logged with redaction
 
 ## MCP client setting in your Claude.app
 
@@ -124,12 +127,6 @@ ALLOWED_COMMANDS="ls ,echo, cat"      # With spaces (using alias)
 ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
 ```
 
-`ALLOW_PATTERNS` can be used for comma-separated regular expressions that match command names. Each pattern is applied with full-match semantics, so `ALLOW_PATTERNS="ls"` allows only the command name `ls` and does not allow `lsof` or `ls -la`. Patterns and command names containing whitespace or shell metacharacters are rejected; do not use `ALLOW_PATTERNS` to describe shell command strings or argument-level policies.
-
-```bash
-ALLOW_PATTERNS="python[0-9.]*,node"    # Command-name patterns only
-```
-
 ### Request Format
 
 ```python
@@ -185,14 +182,27 @@ Error response:
 
 ## Security
 
-The server implements several security measures:
+The server implements several security measures, but it is not an OS sandbox. A command-name allowlist reduces accidental exposure, but allowed binaries may still read accessible files, consume CPU, or perform behavior allowed by the operating system. For hostile workloads, run the server inside an external sandbox such as a container, VM, or OS policy boundary.
 
-1. **Command Whitelisting**: Only explicitly allowed commands can be executed
-2. **Dangerous Argument Rejection**: Known execution-bypass vectors such as `find -exec`, `awk` programs containing `system()`, `tar --checkpoint-action=exec`, `xargs`, shells, interpreters, and `env` are rejected before subprocess creation even when the command name appears in `ALLOW_COMMANDS` or `ALLOWED_COMMANDS`
-3. **Shell Operator Validation**: Commands after shell operators (;, &&, ||, |) are also validated against the whitelist and argument policy
-4. **No Shell Injection**: Commands are executed directly without shell interpretation
+1. **Command Whitelisting**: Only explicitly allowed command names or full-matching `ALLOW_PATTERNS` entries can be executed.
+2. **Default Argument Hardening**: Known exec-capable vectors such as shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, and `tar --checkpoint-action=exec` are rejected by default even when the command name is allowlisted.
+3. **No Shell-String Execution**: Normal commands and pipelines are executed with `asyncio.create_subprocess_exec(*argv)`; user-controlled strings are not passed to a shell.
+4. **Contained Redirection**: Redirection paths must be relative to `directory`; absolute paths, `..` traversal, and symlink escapes are rejected before files are opened.
+5. **Environment Isolation**: Children receive `PATH`, `LANG`, and `LC_ALL` plus names listed in `MCP_SHELL_ENV_ALLOWLIST`. Parent secrets such as tokens are not inherited by default. Per-call `envs` values are added explicitly by the server caller.
+6. **Execution Limits**: `MCP_SHELL_DEFAULT_TIMEOUT_SECONDS` defaults to 30 seconds, `MCP_SHELL_MAX_TIMEOUT_SECONDS` defaults to 300 seconds, and `MCP_SHELL_OUTPUT_LIMIT_BYTES` defaults to 1 MiB. Client timeouts are clamped to the server maximum.
+7. **Audit Logging**: Each invocation emits structured audit metadata for success, rejection, timeout, output cap, and process error outcomes. Secret-like argv values are redacted; stdout/stderr content is not logged.
 
-`ALLOW_COMMANDS` and `ALLOWED_COMMANDS` are command-name allowlists, not a sandbox. Do not allow exec-capable tools unless there is an explicit argument policy that makes the intended subset safe.
+### Security-related environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ALLOW_COMMANDS` / `ALLOWED_COMMANDS` | empty | Comma-separated command names to allow |
+| `ALLOW_PATTERNS` | empty | Comma-separated regex patterns matched with `fullmatch()` against command names |
+| `MCP_SHELL_DEFAULT_TIMEOUT_SECONDS` | `30` | Timeout used when the client omits `timeout` |
+| `MCP_SHELL_MAX_TIMEOUT_SECONDS` | `300` | Maximum effective timeout accepted from clients |
+| `MCP_SHELL_OUTPUT_LIMIT_BYTES` | `1048576` | Maximum captured stdout/stderr bytes per process |
+| `MCP_SHELL_ENV_ALLOWLIST` | empty | Comma-separated parent environment variables copied into children |
+| `MCP_SHELL_SAFE_PATH` | `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin` | PATH supplied to children |
 
 ## Development
 

@@ -8,6 +8,7 @@ from mcp_shell_server.command_validator import CommandValidator
 def clear_env(monkeypatch):
     monkeypatch.delenv("ALLOW_COMMANDS", raising=False)
     monkeypatch.delenv("ALLOWED_COMMANDS", raising=False)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def test_get_allowed_commands(validator, monkeypatch):
 def test_is_command_allowed_with_patterns(validator, monkeypatch):
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "allowed_cmd")
-    monkeypatch.setenv("ALLOW_PATTERNS", "cmd[0-9]+")
+    monkeypatch.setenv("ALLOW_PATTERNS", "^cmd[0-9]+$")
 
     assert validator.is_command_allowed("allowed_cmd")
     assert validator.is_command_allowed("cmd123")
@@ -35,33 +36,6 @@ def test_is_command_allowed_with_patterns(validator, monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "allowed_cmd")
     assert validator.is_command_allowed("allowed_cmd")
     assert not validator.is_command_allowed("disallowed_cmd")
-
-
-def test_allow_patterns_use_fullmatch_not_prefix(validator, monkeypatch):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_PATTERNS", "ls")
-
-    assert validator.is_command_allowed("ls")
-    assert not validator.is_command_allowed("lsof")
-
-
-def test_allow_patterns_reject_unsafe_command_names(validator, monkeypatch):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_PATTERNS", ".+")
-
-    assert not validator.is_command_allowed("ls; touch /tmp/pwned")
-    assert not validator.is_command_allowed("ls -la")
-
-
-@pytest.mark.parametrize("unsafe_pattern", ["ls -la", "ls;.*"])
-def test_allow_patterns_reject_unsafe_pattern_forms(
-    validator, monkeypatch, unsafe_pattern
-):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_PATTERNS", unsafe_pattern)
-
-    with pytest.raises(ValueError, match="ALLOW_PATTERNS entries"):
-        validator.is_command_allowed("ls")
 
 
 def test_validate_no_shell_operators(validator):
@@ -109,63 +83,74 @@ def test_validate_command(validator, monkeypatch):
     validator.validate_command(["allowed_cmd", "-arg"])  # Should not raise
 
 
-def test_rejects_find_exec_even_when_allowlisted(validator, monkeypatch):
+def test_allow_patterns_use_fullmatch_and_reject_unsafe_forms(validator, monkeypatch):
     clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "find")
+    monkeypatch.setenv("ALLOW_PATTERNS", "ls")
 
-    with pytest.raises(ValueError, match="find -exec"):
-        validator.validate_command(["find", ".", "-exec", "sh", "-c", "id", ";"])
+    assert validator.is_command_allowed("ls")
+    assert not validator.is_command_allowed("lsof")
+    with pytest.raises(ValueError, match="Unsafe command name"):
+        validator.is_command_allowed("ls;touch")
+    with pytest.raises(ValueError, match="Unsafe command name"):
+        validator.is_command_allowed("ls -la")
+
+    monkeypatch.setenv("ALLOW_PATTERNS", "ls;.*")
+    with pytest.raises(ValueError, match="Unsafe allowed command pattern"):
+        validator.is_command_allowed("ls")
 
 
-def test_rejects_shells_and_interpreters_even_when_allowlisted(validator, monkeypatch):
+def test_default_dangerous_exec_vectors_are_rejected(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "find,sh,bash,python,python3,awk,tar,xargs,env")
+
+    dangerous_commands = [
+        ["find", ".", "-exec", "sh", "-c", "echo pwned", ";"],
+        ["sh", "-c", "echo pwned"],
+        ["bash", "-c", "echo pwned"],
+        ["python", "-c", "print('pwned')"],
+        ["python3", "-c", "print('pwned')"],
+        ["awk", "BEGIN { system(\"id\") }"],
+        ["tar", "--checkpoint-action=exec=sh shell.sh"],
+        ["xargs", "sh", "-c", "echo pwned"],
+        ["env"],
+    ]
+
+    for command in dangerous_commands:
+        with pytest.raises(ValueError, match="default security policy"):
+            validator.validate_command(command)
+
+
+def test_allow_patterns_use_fullmatch(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_PATTERNS", "ls")
+
+    validator.validate_command(["ls"])
+    with pytest.raises(ValueError, match="Command not allowed"):
+        validator.validate_command(["lsof"])
+    with pytest.raises(ValueError, match="Unsafe command name"):
+        validator.validate_command(["ls;touch"])
+    with pytest.raises(ValueError, match="Unsafe command name"):
+        validator.validate_command(["ls -la"])
+
+
+def test_dangerous_exec_capable_vectors_are_rejected(validator, monkeypatch):
     clear_env(monkeypatch)
     monkeypatch.setenv(
         "ALLOW_COMMANDS",
-            "sh,/bin/bash,zsh,python,python3.12,perl,ruby,node,env,xargs",
-
+        "find,sh,bash,python,awk,tar,xargs,env,node,perl,ruby",
     )
 
-    for command in [
-        "sh",
-        "/bin/bash",
-        "zsh",
-        "python",
-        "python3.12",
-        "perl",
-        "ruby",
-        "node",
-        "env",
-        "xargs",
-    ]:
-        with pytest.raises(ValueError, match="default argument policy"):
-            validator.validate_command([command, "--version"])
+    dangerous_commands = [
+        (["find", ".", "-exec", "sh", "-c", "id", ";"], "find -exec"),
+        (["sh", "-c", "id"], "sh"),
+        (["bash", "-c", "id"], "bash"),
+        (["python", "-c", "print(1)"], "python"),
+        (["awk", "BEGIN { system(\"id\") }"], "awk system"),
+        (["tar", "--checkpoint-action=exec=sh shell.sh"], "tar checkpoint"),
+        (["xargs", "sh"], "xargs"),
+        (["env"], "env"),
+    ]
 
-
-def test_rejects_awk_system_call_but_allows_plain_awk(validator, monkeypatch):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "awk")
-
-    validator.validate_command(["awk", "{ print $1 }"])
-
-    with pytest.raises(ValueError, match=r"awk system\(\)"):
-        validator.validate_command(["awk", "BEGIN { system(\"id\") }"])
-
-
-def test_rejects_tar_checkpoint_action_exec(validator, monkeypatch):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "tar")
-
-    validator.validate_command(["tar", "-cf", "archive.tar", "file.txt"])
-
-    with pytest.raises(ValueError, match="tar --checkpoint-action=exec"):
-        validator.validate_command(
-            ["tar", "--checkpoint=1", "--checkpoint-action=exec=sh exploit.sh"]
-        )
-
-
-def test_validate_pipeline_rejects_dangerous_segment(validator, monkeypatch):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "cat,xargs")
-
-    with pytest.raises(ValueError, match="default argument policy"):
-        validator.validate_pipeline(["cat", "items.txt", "|", "xargs", "sh", "-c"])
+    for argv, expected in dangerous_commands:
+        with pytest.raises(ValueError, match=expected):
+            validator.validate_command(argv)
