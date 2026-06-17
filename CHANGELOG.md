@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-17
+
+### Added
+- Made `directory` argument optional, defaulting to the current working directory (closes #11)
+- Support for relative directory paths
+- New `DirectoryManager` module for centralized directory resolution
+
+### Changed
+- Removed `asyncio` from explicit dependencies (standard library)
+
 ## [1.0.4] - 2026-06-17
 
 ### Security
