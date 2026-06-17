@@ -151,10 +151,18 @@ Audit logs intentionally do **not** include raw stdout or stderr bodies. Secret-
 
 ### Request Format
 
+The `directory` argument is optional. If omitted, commands run in the MCP server process current working directory (server process CWD). Relative `directory` values are resolved from that same server process CWD. This base is **not** the MCP client CWD; it is the working directory of the process that launched `mcp-shell-server`.
+
 ```python
-# Basic command execution
+# Basic command execution in the server process CWD
 {
-    "command": ["ls", "-l", "/tmp"]
+    "command": ["ls", "-l"]
+}
+
+# Command with a relative working directory resolved from the server process CWD
+{
+    "command": ["pwd"],
+    "directory": "subproject"
 }
 
 # Command with stdin input
@@ -257,7 +265,7 @@ pytest
 |-----------|------------|----------|-----------------------------------------------|
 | command   | string[]   | Yes      | Command and its arguments as array elements   |
 | stdin     | string     | No       | Input to be passed to the command            |
-| directory | string     | No       | Working directory for command execution       |
+| directory | string     | No       | Working directory; omitted uses the server process CWD, and relative paths resolve from that server process CWD |
 | timeout   | integer    | No       | Maximum execution time in seconds             |
 
 ### Response Fields

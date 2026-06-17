@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from mcp_shell_server.io_redirection_handler import IORedirectionHandler
+from mcp_shell_server.server import ExecuteToolHandler
 from mcp_shell_server.shell_executor import ShellExecutor
 
 
@@ -346,3 +347,63 @@ async def test_shell_executor_redirect_writes_stay_inside_directory(
     assert result["error"] is None
     assert result["stdout"] == ""
     assert (tmp_path / "out.txt").read_text() == "hello\nworld\n"
+
+
+@pytest.mark.asyncio
+async def test_handler_omitted_directory_uses_cwd_for_redirection_containment(
+    tmp_path, monkeypatch
+):
+    """Omitted directory still contains redirections under the server process CWD."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+    monkeypatch.chdir(tmp_path)
+    outside_file = tmp_path.parent / "omitted-directory-outside.txt"
+    outside_file.write_text("keep me", encoding="utf-8")
+    handler = ExecuteToolHandler()
+
+    result = await handler.run_tool({"command": ["echo", "hello", ">", "inside.txt"]})
+
+    assert result == []
+    assert (tmp_path / "inside.txt").read_text(encoding="utf-8") == "hello\n"
+
+    with pytest.raises(ValueError, match="parent traversal"):
+        await handler.run_tool(
+            {"command": ["echo", "changed", ">", "../omitted-directory-outside.txt"]}
+        )
+
+    assert outside_file.read_text(encoding="utf-8") == "keep me"
+
+
+@pytest.mark.asyncio
+async def test_handler_relative_directory_uses_effective_dir_for_symlink_containment(
+    tmp_path, monkeypatch
+):
+    """Relative directory redirection containment uses the resolved effective directory."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    outside_file = tmp_path / "relative-directory-outside.txt"
+    outside_file.write_text("keep me", encoding="utf-8")
+    link = work_dir / "outside-link.txt"
+    try:
+        os.symlink(outside_file, link)
+    except OSError as e:  # pragma: no cover - platform/filesystem dependent
+        pytest.skip(f"symlink creation unavailable: {e}")
+    monkeypatch.chdir(tmp_path)
+    handler = ExecuteToolHandler()
+
+    result = await handler.run_tool(
+        {"command": ["echo", "hello", ">", "inside.txt"], "directory": "work"}
+    )
+
+    assert result == []
+    assert (work_dir / "inside.txt").read_text(encoding="utf-8") == "hello\n"
+
+    with pytest.raises(ValueError, match="escapes the working directory"):
+        await handler.run_tool(
+            {
+                "command": ["echo", "changed", ">", "outside-link.txt"],
+                "directory": "work",
+            }
+        )
+
+    assert outside_file.read_text(encoding="utf-8") == "keep me"

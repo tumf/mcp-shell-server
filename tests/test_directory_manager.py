@@ -36,6 +36,24 @@ def test_validate_directory(tmp_path):
         manager.validate_directory(test_file)
 
 
+def test_resolve_effective_directory(monkeypatch, tmp_path):
+    """Optional request directories resolve relative to the server process CWD."""
+    manager = DirectoryManager()
+    child = tmp_path / "child"
+    child.mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    assert manager.resolve_effective_directory(None) == os.getcwd()
+    assert manager.resolve_effective_directory("child") == os.path.abspath("child")
+    assert manager.resolve_effective_directory(str(child)) == str(child)
+
+    with pytest.raises(ValueError, match="Directory cannot be empty"):
+        manager.resolve_effective_directory("")
+
+    with pytest.raises(ValueError, match="Directory cannot be empty"):
+        manager.resolve_effective_directory("  \n")
+
+
 def test_get_absolute_path(tmp_path):
     """Test absolute path resolution."""
     manager = DirectoryManager()

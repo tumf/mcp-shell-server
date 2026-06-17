@@ -109,7 +109,7 @@ async def test_tool_execution_timeout(monkeypatch):
     assert "command" in tool.inputSchema["properties"]
     assert "stdin" in tool.inputSchema["properties"]
     assert "directory" in tool.inputSchema["properties"]
-    assert tool.inputSchema["required"] == ["command", "directory"]
+    assert tool.inputSchema["required"] == ["command"]
 
 
 @pytest.mark.asyncio
