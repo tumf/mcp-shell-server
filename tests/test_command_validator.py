@@ -153,10 +153,19 @@ def test_dangerous_exec_capable_vectors_are_rejected(validator, monkeypatch):
         (["/usr/bin/python", "-c", "print(1)"], "python"),
         (["/usr/bin/awk", 'BEGIN { system("id") }'], "awk"),
         (["/usr/bin/awk", 'BEGIN { "id" | getline out; print out }'], "awk"),
-        (["/usr/bin/tar", "--checkpoint-action=exec=sh shell.sh"], "tar command execution"),
-        (["/usr/bin/tar", "--checkpoint-action", "exec=sh shell.sh"], "tar command execution"),
+        (
+            ["/usr/bin/tar", "--checkpoint-action=exec=sh shell.sh"],
+            "tar command execution",
+        ),
+        (
+            ["/usr/bin/tar", "--checkpoint-action", "exec=sh shell.sh"],
+            "tar command execution",
+        ),
         (["/usr/bin/tar", "--to-command=sh shell.sh"], "tar command execution"),
-        (["/usr/bin/tar", "--use-compress-program=sh shell.sh"], "tar command execution"),
+        (
+            ["/usr/bin/tar", "--use-compress-program=sh shell.sh"],
+            "tar command execution",
+        ),
         (["/usr/bin/tar", "-I/bin/sh"], "tar command execution"),
         (["/usr/bin/tar", "--rsh-command=/bin/sh -c id"], "tar command execution"),
         (["/usr/bin/xargs", "sh"], "xargs"),
