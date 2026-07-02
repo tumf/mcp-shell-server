@@ -38,7 +38,7 @@ async def test_git_alias_exec_poc_is_rejected_without_side_effect(
         )
 
     assert result["status"] == 1
-    assert "git alias exec" in result["error"]
+    assert "git command execution config" in result["error"]
     assert not marker.exists()
     assert any(
         getattr(record, "audit", {}).get("result_type") == "rejected"
