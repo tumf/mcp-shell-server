@@ -98,14 +98,32 @@ class CommandValidator:
             index += 1
         return values
 
-    def _is_git_alias_exec_config(self, config_value: str) -> bool:
-        alias_index = config_value.lower().find("alias.")
-        if alias_index == -1:
-            return False
-        return config_value.find("=!", alias_index + len("alias.")) != -1
+    def _is_git_dangerous_config(self, config_value: str) -> bool:
+        compact = re.sub(r"\s+", "", config_value)
+        return bool(
+            re.search(r"(?i)(?:^|[.\s])alias\.[^=\s]+\s*=\s*!", config_value)
+            or re.search(r"(?i)^core\.(pager|sshcommand)=", compact)
+        )
+
+    def _has_option_value(self, args: List[str], option: str, predicate) -> bool:
+        for index, arg in enumerate(args):
+            if arg == option and index + 1 < len(args) and predicate(args[index + 1]):
+                return True
+            if arg.startswith(f"{option}=") and predicate(arg.split("=", 1)[1]):
+                return True
+        return False
+
+    def _has_any_option(self, args: List[str], options: set[str]) -> bool:
+        return any(
+            arg in options or any(arg.startswith(f"{option}=") for option in options)
+            for arg in args
+        )
+
+    def _has_short_option_prefix(self, args: List[str], option: str) -> bool:
+        return any(arg == option or arg.startswith(option) for arg in args)
 
     def _validate_default_argument_policy(self, command: List[str]) -> None:
-        cmd = self._validate_command_name_form(command[0])
+        cmd = os.path.basename(self._validate_command_name_form(command[0]))
         args = command[1:]
         if cmd in DANGEROUS_COMMANDS:
             raise ValueError(f"Command rejected by default security policy: {cmd}")
@@ -113,26 +131,33 @@ class CommandValidator:
         if cmd == "find" and any(arg in {"-exec", "-execdir"} for arg in args):
             raise ValueError("Command rejected by default security policy: find -exec")
 
-        if cmd == "awk" and any("system(" in arg.replace(" ", "") for arg in args):
-            raise ValueError(
-                "Command rejected by default security policy: awk system()"
-            )
-
-        if cmd == "tar" and any(
-            arg == "--checkpoint-action=exec"
-            or arg.startswith("--checkpoint-action=exec=")
+        if cmd == "awk" and any(
+            "system(" in (compact := re.sub(r"\s+", "", arg)) or "|" in compact
             for arg in args
         ):
             raise ValueError(
-                "Command rejected by default security policy: tar checkpoint exec"
+                "Command rejected by default security policy: awk command execution"
+            )
+
+        if cmd == "tar" and (
+            self._has_option_value(
+                args, "--checkpoint-action", lambda value: value.startswith("exec=")
+            )
+            or self._has_any_option(
+                args, {"--to-command", "--use-compress-program", "--rsh-command"}
+            )
+            or self._has_short_option_prefix(args, "-I")
+        ):
+            raise ValueError(
+                "Command rejected by default security policy: tar command execution option"
             )
 
         if cmd == "git" and any(
-            self._is_git_alias_exec_config(config_value)
+            self._is_git_dangerous_config(config_value)
             for config_value in self._git_config_values(args)
         ):
             raise ValueError(
-                "Command rejected by default security policy: git alias exec"
+                "Command rejected by default security policy: git command execution config"
             )
 
     def validate_pipeline(self, commands: List[str]) -> Dict[str, str]:

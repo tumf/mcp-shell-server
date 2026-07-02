@@ -106,14 +106,18 @@ def test_default_dangerous_exec_vectors_are_rejected(validator, monkeypatch):
     )
 
     dangerous_commands = [
-        ["find", ".", "-exec", "sh", "-c", "echo pwned", ";"],
-        ["sh", "-c", "echo pwned"],
-        ["bash", "-c", "echo pwned"],
-        ["python", "-c", "print('pwned')"],
-        ["python3", "-c", "print('pwned')"],
+        ["find", ".", "-exec", "sh", "-c", "id", ";"],
+        ["sh", "-c", "id"],
+        ["bash", "-c", "id"],
+        ["python", "-c", "print(1)"],
+        ["python3", "script.py"],
         ["awk", 'BEGIN { system("id") }'],
+        ["awk", 'BEGIN { system\t("id") }'],
+        ["awk", 'BEGIN { print "id" | "/bin/sh" }'],
         ["tar", "--checkpoint-action=exec=sh shell.sh"],
-        ["xargs", "sh", "-c", "echo pwned"],
+        ["tar", "-I/bin/sh", "-cf", "x.tar", "file"],
+        ["tar", "--rsh-command=/bin/sh -c id", "-cf", "host:/tmp/x", "file"],
+        ["xargs", "sh"],
         ["env"],
     ]
 
@@ -139,18 +143,33 @@ def test_dangerous_exec_capable_vectors_are_rejected(validator, monkeypatch):
     clear_env(monkeypatch)
     monkeypatch.setenv(
         "ALLOW_COMMANDS",
-        "find,sh,bash,python,awk,tar,xargs,env,node,perl,ruby",
+        "/usr/bin/find,/bin/sh,/bin/bash,/usr/bin/python,/usr/bin/awk,/usr/bin/tar,/usr/bin/xargs,/usr/bin/env,node,perl,ruby",
     )
 
     dangerous_commands = [
-        (["find", ".", "-exec", "sh", "-c", "id", ";"], "find -exec"),
-        (["sh", "-c", "id"], "sh"),
-        (["bash", "-c", "id"], "bash"),
-        (["python", "-c", "print(1)"], "python"),
-        (["awk", 'BEGIN { system("id") }'], "awk system"),
-        (["tar", "--checkpoint-action=exec=sh shell.sh"], "tar checkpoint"),
-        (["xargs", "sh"], "xargs"),
-        (["env"], "env"),
+        (["/usr/bin/find", ".", "-exec", "sh", "-c", "id", ";"], "find -exec"),
+        (["/bin/sh", "-c", "id"], "sh"),
+        (["/bin/bash", "-c", "id"], "bash"),
+        (["/usr/bin/python", "-c", "print(1)"], "python"),
+        (["/usr/bin/awk", 'BEGIN { system("id") }'], "awk"),
+        (["/usr/bin/awk", 'BEGIN { "id" | getline out; print out }'], "awk"),
+        (
+            ["/usr/bin/tar", "--checkpoint-action=exec=sh shell.sh"],
+            "tar command execution",
+        ),
+        (
+            ["/usr/bin/tar", "--checkpoint-action", "exec=sh shell.sh"],
+            "tar command execution",
+        ),
+        (["/usr/bin/tar", "--to-command=sh shell.sh"], "tar command execution"),
+        (
+            ["/usr/bin/tar", "--use-compress-program=sh shell.sh"],
+            "tar command execution",
+        ),
+        (["/usr/bin/tar", "-I/bin/sh"], "tar command execution"),
+        (["/usr/bin/tar", "--rsh-command=/bin/sh -c id"], "tar command execution"),
+        (["/usr/bin/xargs", "sh"], "xargs"),
+        (["/usr/bin/env"], "env"),
     ]
 
     for argv, expected in dangerous_commands:
@@ -167,10 +186,25 @@ def test_git_alias_exec_bypass_is_rejected(validator, monkeypatch):
         ["git", '-calias.pwn=!sh -c "touch marker"', "pwn"],
         ["git", "-c", "url.alias.example=!not-an-exec-alias", "status"],
         ["git", "-c", 'Alias.pwn=!sh -c "touch marker"', "pwn"],
+        ["git", "-c", 'alias.pwn = !sh -c "touch marker"', "pwn"],
     ]
 
     for command in dangerous_commands:
-        with pytest.raises(ValueError, match="git alias exec"):
+        with pytest.raises(ValueError, match="git command execution config"):
+            validator.validate_command(command)
+
+
+def test_git_exec_capable_configs_are_rejected(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "/usr/bin/git")
+
+    dangerous_commands = [
+        ["/usr/bin/git", "-c", "core.pager=!sh -c id", "log"],
+        ["/usr/bin/git", "-c", "core.sshCommand=sh -c id", "ls-remote", "ssh://x/y"],
+    ]
+
+    for command in dangerous_commands:
+        with pytest.raises(ValueError, match="git command execution config"):
             validator.validate_command(command)
 
 
