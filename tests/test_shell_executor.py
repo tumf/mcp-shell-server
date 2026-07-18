@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import subprocess
 import tempfile
 from unittest.mock import AsyncMock
 
@@ -23,22 +24,23 @@ def temp_test_dir():
 
 
 @pytest.mark.asyncio
-async def test_git_alias_exec_poc_is_rejected_without_side_effect(
+async def test_git_config_poc_is_rejected_without_side_effect(
     tmp_path, monkeypatch, caplog
 ):
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "git")
-    marker = tmp_path / "git-alias-poc-marker"
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    marker = tmp_path / "git-config-poc-marker"
     executor = ShellExecutor()
 
     with caplog.at_level(logging.INFO, logger="mcp-shell-server.audit"):
         result = await executor.execute(
-            ["git", "-c", f'alias.pwn=!sh -c "touch {marker}"', "pwn"],
+            ["git", "-c", f"core.fsmonitor=touch {marker}", "status"],
             str(tmp_path),
         )
 
     assert result["status"] == 1
-    assert "git command execution config" in result["error"]
+    assert "git command-scoped config" in result["error"]
     assert not marker.exists()
     assert any(
         getattr(record, "audit", {}).get("result_type") == "rejected"

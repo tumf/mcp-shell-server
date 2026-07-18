@@ -83,28 +83,6 @@ class CommandValidator:
         if any(operator in cmd for operator in [";", "&&", "||", "`", "\n", "\r"]):
             raise ValueError(f"Unexpected shell operator: {cmd}")
 
-    def _git_config_values(self, args: List[str]) -> List[str]:
-        values: List[str] = []
-        index = 0
-        while index < len(args):
-            arg = args[index]
-            if arg == "-c":
-                if index + 1 < len(args):
-                    values.append(args[index + 1])
-                index += 2
-                continue
-            if arg.startswith("-c") and arg != "-c":
-                values.append(arg[2:])
-            index += 1
-        return values
-
-    def _is_git_dangerous_config(self, config_value: str) -> bool:
-        compact = re.sub(r"\s+", "", config_value)
-        return bool(
-            re.search(r"(?i)(?:^|[.\s])alias\.[^=\s]+\s*=\s*!", config_value)
-            or re.search(r"(?i)^core\.(pager|sshcommand)=", compact)
-        )
-
     def _has_option_value(self, args: List[str], option: str, predicate) -> bool:
         for index, arg in enumerate(args):
             if arg == option and index + 1 < len(args) and predicate(args[index + 1]):
@@ -121,6 +99,29 @@ class CommandValidator:
 
     def _has_short_option_prefix(self, args: List[str], option: str) -> bool:
         return any(arg == option or arg.startswith(option) for arg in args)
+
+    def _git_subcommand_index(self, args: List[str]) -> int | None:
+        options_with_value = {
+            "-C",
+            "--config-env",
+            "--git-dir",
+            "--namespace",
+            "--super-prefix",
+            "--work-tree",
+        }
+        index = 0
+        while index < len(args):
+            arg = args[index]
+            if arg == "--":
+                return None
+            if arg == "-c" or arg.startswith("-c"):
+                raise ValueError(
+                    "Command rejected by default security policy: git command-scoped config"
+                )
+            if not arg.startswith("-"):
+                return index
+            index += 2 if arg in options_with_value else 1
+        return None
 
     def _validate_default_argument_policy(self, command: List[str]) -> None:
         cmd = os.path.basename(self._validate_command_name_form(command[0]))
@@ -152,13 +153,23 @@ class CommandValidator:
                 "Command rejected by default security policy: tar command execution option"
             )
 
-        if cmd == "git" and any(
-            self._is_git_dangerous_config(config_value)
-            for config_value in self._git_config_values(args)
-        ):
-            raise ValueError(
-                "Command rejected by default security policy: git command execution config"
-            )
+        if cmd == "git":
+            subcommand_index = self._git_subcommand_index(args)
+            git_args = args if subcommand_index is None else args[subcommand_index:]
+            if (
+                self._has_any_option(
+                    args, {"--upload-pack", "--receive-pack", "--exec"}
+                )
+                or (
+                    git_args
+                    and git_args[0] == "clone"
+                    and self._has_short_option_prefix(git_args[1:], "-u")
+                )
+                or any(arg.startswith("ext::") for arg in args)
+            ):
+                raise ValueError(
+                    "Command rejected by default security policy: git external program"
+                )
 
     def validate_pipeline(self, commands: List[str]) -> Dict[str, str]:
         """Validate pipeline tokens and ensure all command segments are allowed."""

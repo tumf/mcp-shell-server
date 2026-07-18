@@ -177,47 +177,50 @@ def test_dangerous_exec_capable_vectors_are_rejected(validator, monkeypatch):
             validator.validate_command(argv)
 
 
-def test_git_alias_exec_bypass_is_rejected(validator, monkeypatch):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "git")
-
-    dangerous_commands = [
-        ["git", "-c", 'alias.pwn=!sh -c "touch marker"', "pwn"],
-        ["git", '-calias.pwn=!sh -c "touch marker"', "pwn"],
-        ["git", "-c", "url.alias.example=!not-an-exec-alias", "status"],
-        ["git", "-c", 'Alias.pwn=!sh -c "touch marker"', "pwn"],
-        ["git", "-c", 'alias.pwn = !sh -c "touch marker"', "pwn"],
-    ]
-
-    for command in dangerous_commands:
-        with pytest.raises(ValueError, match="git command execution config"):
-            validator.validate_command(command)
-
-
-def test_git_exec_capable_configs_are_rejected(validator, monkeypatch):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "/usr/bin/git")
-
-    dangerous_commands = [
-        ["/usr/bin/git", "-c", "core.pager=!sh -c id", "log"],
-        ["/usr/bin/git", "-c", "core.sshCommand=sh -c id", "ls-remote", "ssh://x/y"],
-    ]
-
-    for command in dangerous_commands:
-        with pytest.raises(ValueError, match="git command execution config"):
-            validator.validate_command(command)
-
-
-def test_git_non_exec_config_is_allowed(validator, monkeypatch):
-    clear_env(monkeypatch)
-    monkeypatch.setenv("ALLOW_COMMANDS", "git")
-
-    allowed_commands = [
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["git", "-c", "core.fsmonitor=touch marker", "status"],
+        ["git", "-cdiff.external=touch marker", "diff", "--ext-diff"],
         ["git", "-c", "user.name=Example", "status"],
-        ["git", "-c", "core.commentChar=!", "status"],
-        ["git", "-calias.safe=status", "safe"],
-        ["git", "status"],
-    ]
+        ["git", "-cAlias.pwn=!sh -c id", "status"],
+        ["git", "-c"],
+        ["git", "-cuser.name=Example", "status"],
+    ],
+)
+def test_git_command_scoped_configs_are_rejected(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
 
-    for command in allowed_commands:
+    with pytest.raises(ValueError, match="git command-scoped config"):
         validator.validate_command(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["git", "--upload-pack=sh", "fetch"],
+        ["git", "clone", "-u", "sh", "repo"],
+        ["git", "clone", "ext::sh -c id"],
+    ],
+)
+def test_git_external_program_vectors_are_rejected(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    with pytest.raises(ValueError, match="git external program"):
+        validator.validate_command(command)
+
+
+def test_git_status_is_allowed(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    validator.validate_command(["git", "status"])
+
+
+def test_git_subcommand_c_option_is_allowed(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    validator.validate_command(["git", "commit", "-c", "HEAD", "--dry-run"])
