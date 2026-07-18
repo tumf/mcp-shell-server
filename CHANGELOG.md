@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.2] - 2026-07-18
 
 ### Security
-+- Reject all command-scoped Git configuration overrides (`git -c <name=value>` and `git -c<name=value>`). Versions `<=1.1.1` are affected.
+- Reject all command-scoped Git configuration overrides (`git -c <name=value>` and `git -c<name=value>`). Versions `<=1.1.1` are affected.
 
 ## [1.1.0] - 2026-06-17
 

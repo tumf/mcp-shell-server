@@ -100,6 +100,29 @@ class CommandValidator:
     def _has_short_option_prefix(self, args: List[str], option: str) -> bool:
         return any(arg == option or arg.startswith(option) for arg in args)
 
+    def _git_subcommand_index(self, args: List[str]) -> int | None:
+        options_with_value = {
+            "-C",
+            "--config-env",
+            "--git-dir",
+            "--namespace",
+            "--super-prefix",
+            "--work-tree",
+        }
+        index = 0
+        while index < len(args):
+            arg = args[index]
+            if arg == "--":
+                return None
+            if arg == "-c" or arg.startswith("-c"):
+                raise ValueError(
+                    "Command rejected by default security policy: git command-scoped config"
+                )
+            if not arg.startswith("-"):
+                return index
+            index += 2 if arg in options_with_value else 1
+        return None
+
     def _validate_default_argument_policy(self, command: List[str]) -> None:
         cmd = os.path.basename(self._validate_command_name_form(command[0]))
         args = command[1:]
@@ -131,13 +154,19 @@ class CommandValidator:
             )
 
         if cmd == "git":
-            if any(arg == "-c" or arg.startswith("-c") for arg in args):
-                raise ValueError(
-                    "Command rejected by default security policy: git command-scoped config"
+            subcommand_index = self._git_subcommand_index(args)
+            git_args = args if subcommand_index is None else args[subcommand_index:]
+            if (
+                self._has_any_option(
+                    args, {"--upload-pack", "--receive-pack", "--exec"}
                 )
-            if self._has_any_option(
-                args, {"--upload-pack", "--receive-pack", "--exec"}
-            ) or any(arg.startswith("ext::") for arg in args):
+                or (
+                    git_args
+                    and git_args[0] == "clone"
+                    and self._has_short_option_prefix(git_args[1:], "-u")
+                )
+                or any(arg.startswith("ext::") for arg in args)
+            ):
                 raise ValueError(
                     "Command rejected by default security policy: git external program"
                 )

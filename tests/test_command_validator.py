@@ -200,6 +200,7 @@ def test_git_command_scoped_configs_are_rejected(validator, monkeypatch, command
     "command",
     [
         ["git", "--upload-pack=sh", "fetch"],
+        ["git", "clone", "-u", "sh", "repo"],
         ["git", "clone", "ext::sh -c id"],
     ],
 )
@@ -216,3 +217,10 @@ def test_git_status_is_allowed(validator, monkeypatch):
     monkeypatch.setenv("ALLOW_COMMANDS", "git")
 
     validator.validate_command(["git", "status"])
+
+
+def test_git_subcommand_c_option_is_allowed(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    validator.validate_command(["git", "commit", "-c", "HEAD", "--dry-run"])

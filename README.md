@@ -113,7 +113,7 @@ ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
 ALLOW_PATTERNS="python[0-9.]*,node"    # Command-name patterns only
 ```
 
-Allowlisting a command name is not a sandbox for that program's own argument-level execution features. The server applies default argument hardening even when the binary is allowed: known exec-capable vectors such as `find -exec`, shell/interpreter launchers, `awk system()`, `tar --checkpoint-action=exec`, `env`, `xargs`, and git alias external commands are rejected before subprocess creation. For example, `ALLOW_COMMANDS="git"` does not permit `git -c alias.pwn=!sh -c "touch marker" pwn`; the git `alias.<name>=!<cmd>` exec form is rejected by default.
+Allowlisting a command name is not a sandbox for that program's own argument-level execution features. The server applies default argument hardening even when the binary is allowed: known exec-capable vectors such as `find -exec`, shell/interpreter launchers, `awk system()`, `tar --checkpoint-action=exec`, `env`, `xargs`, and all Git command-scoped configuration overrides are rejected before subprocess creation. For example, `ALLOW_COMMANDS="git"` does not permit `git -c user.name=Example status` or `git -c alias.pwn=!sh -c "touch marker" pwn`; every global `git -c <name=value>` and `git -c<name=value>` override is rejected regardless of its key or value.
 
 ### Child process environment
 
@@ -215,7 +215,7 @@ Error response:
 The server implements several security measures, but it is not an OS sandbox. A command-name allowlist reduces accidental exposure, but allowed binaries may still read accessible files, consume CPU, or perform behavior allowed by the operating system. For hostile workloads, run the server inside an external sandbox such as a container, VM, or OS policy boundary.
 
 1. **Command Whitelisting**: Only explicitly allowed command names or full-matching `ALLOW_PATTERNS` entries can be executed.
-2. **Default Argument Hardening**: Known exec-capable vectors such as shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, `tar --checkpoint-action=exec`, and git external aliases are rejected by default even when the command name is allowlisted.
+2. **Default Argument Hardening**: Known exec-capable vectors such as shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, `tar --checkpoint-action=exec`, Git external-program options, and every global `git -c <name=value>` or `git -c<name=value>` configuration override are rejected by default even when the command name is allowlisted.
 3. **No Shell-String Execution**: Normal commands and pipelines are executed with `asyncio.create_subprocess_exec(*argv)`; user-controlled strings are not passed to a shell.
 4. **Contained Redirection**: Redirection paths must be relative to `directory`; absolute paths, `..` traversal, and symlink escapes are rejected before files are opened.
 5. **Environment Isolation**: Children receive a minimal environment plus names listed in `MCP_SHELL_CHILD_ENV_ALLOWLIST`. Parent secrets such as tokens are not inherited by default. Per-call `envs` values are only accepted for explicitly allowlisted names.
