@@ -50,6 +50,73 @@ async def test_git_config_poc_is_rejected_without_side_effect(
 
 
 @pytest.mark.asyncio
+async def test_git_config_env_poc_is_rejected_without_side_effect(
+    tmp_path, monkeypatch
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "PAYLOAD")
+    marker = tmp_path / "git-config-env-poc-marker"
+
+    result = await ShellExecutor().execute(
+        ["git", "--config-env=alias.pwn=PAYLOAD", "pwn"],
+        str(tmp_path),
+        envs={"PAYLOAD": f"!touch {marker}"},
+    )
+
+    assert result["status"] == 1
+    assert "git external program" in result["error"]
+    assert not marker.exists()
+
+
+@pytest.mark.asyncio
+async def test_git_exec_path_poc_is_rejected_without_side_effect(tmp_path, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+    marker = tmp_path / "git-exec-path-poc-marker"
+    executable = tmp_path / "git-pwn"
+    executable.write_text(f"#!/bin/sh\ntouch {marker}\n")
+    executable.chmod(0o755)
+
+    result = await ShellExecutor().execute(
+        ["git", f"--exec-path={tmp_path}", "pwn"], str(tmp_path)
+    )
+
+    assert result["status"] == 1
+    assert "git external program" in result["error"]
+    assert not marker.exists()
+
+
+@pytest.mark.asyncio
+async def test_git_clone_config_poc_is_rejected_without_side_effect(
+    tmp_path, monkeypatch
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    marker = tmp_path / "git-clone-config-poc-marker"
+    subprocess.run(["git", "init", "-q", str(source)], check=True)
+
+    result = await ShellExecutor().execute(
+        [
+            "git",
+            "clone",
+            "-c",
+            f"core.fsmonitor=touch {marker}",
+            str(source),
+            str(destination),
+        ],
+        str(tmp_path),
+    )
+
+    assert result["status"] == 1
+    assert "git external program" in result["error"]
+    assert not marker.exists()
+    assert not destination.exists()
+
+
+@pytest.mark.asyncio
 async def test_basic_command_execution(
     shell_executor_with_mock,
     mock_process_manager,

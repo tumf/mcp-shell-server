@@ -200,7 +200,15 @@ def test_git_command_scoped_configs_are_rejected(validator, monkeypatch, command
     "command",
     [
         ["git", "--upload-pack=sh", "fetch"],
+        ["git", "clone", "--u=sh", "repo"],
+        ["git", "push", "--rece=sh", "repo"],
+        ["git", "--config-env=alias.pwn=PAYLOAD", "pwn"],
+        ["git", "--exec-path=/tmp", "pwn"],
         ["git", "clone", "-u", "sh", "repo"],
+        ["git", "clone", "-c", "core.fsmonitor=touch marker", "repo"],
+        ["git", "clone", "--config", "core.fsmonitor=touch marker", "repo"],
+        ["git", "clone", "--co", "core.fsmonitor=touch marker", "repo"],
+        ["git", "clone", "--co=core.fsmonitor=touch marker", "repo"],
         ["git", "clone", "ext::sh -c id"],
     ],
 )

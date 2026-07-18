@@ -156,14 +156,33 @@ class CommandValidator:
         if cmd == "git":
             subcommand_index = self._git_subcommand_index(args)
             git_args = args if subcommand_index is None else args[subcommand_index:]
+            clone_args = git_args[1:] if git_args and git_args[0] == "clone" else []
             if (
                 self._has_any_option(
-                    args, {"--upload-pack", "--receive-pack", "--exec"}
+                    args,
+                    {
+                        "--config-env",
+                        "--exec",
+                        "--exec-path",
+                        "--receive-pack",
+                        "--upload-pack",
+                    },
                 )
+                or any(arg.startswith("--upl") for arg in args)
+                or any(arg.startswith("--rece") for arg in args)
                 or (
-                    git_args
-                    and git_args[0] == "clone"
-                    and self._has_short_option_prefix(git_args[1:], "-u")
+                    clone_args
+                    and (
+                        self._has_short_option_prefix(clone_args, "-c")
+                        or self._has_short_option_prefix(clone_args, "-u")
+                        or any(arg.startswith("--u") for arg in clone_args)
+                        or any(
+                            arg == "--co"
+                            or arg.startswith("--co=")
+                            or arg.startswith("--con")
+                            for arg in clone_args
+                        )
+                    )
                 )
                 or any(arg.startswith("ext::") for arg in args)
             ):
