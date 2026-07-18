@@ -83,28 +83,6 @@ class CommandValidator:
         if any(operator in cmd for operator in [";", "&&", "||", "`", "\n", "\r"]):
             raise ValueError(f"Unexpected shell operator: {cmd}")
 
-    def _git_config_values(self, args: List[str]) -> List[str]:
-        values: List[str] = []
-        index = 0
-        while index < len(args):
-            arg = args[index]
-            if arg == "-c":
-                if index + 1 < len(args):
-                    values.append(args[index + 1])
-                index += 2
-                continue
-            if arg.startswith("-c") and arg != "-c":
-                values.append(arg[2:])
-            index += 1
-        return values
-
-    def _is_git_dangerous_config(self, config_value: str) -> bool:
-        compact = re.sub(r"\s+", "", config_value)
-        return bool(
-            re.search(r"(?i)(?:^|[.\s])alias\.[^=\s]+\s*=\s*!", config_value)
-            or re.search(r"(?i)^core\.(pager|sshcommand)=", compact)
-        )
-
     def _has_option_value(self, args: List[str], option: str, predicate) -> bool:
         for index, arg in enumerate(args):
             if arg == option and index + 1 < len(args) and predicate(args[index + 1]):
@@ -152,13 +130,17 @@ class CommandValidator:
                 "Command rejected by default security policy: tar command execution option"
             )
 
-        if cmd == "git" and any(
-            self._is_git_dangerous_config(config_value)
-            for config_value in self._git_config_values(args)
-        ):
-            raise ValueError(
-                "Command rejected by default security policy: git command execution config"
-            )
+        if cmd == "git":
+            if any(arg == "-c" or arg.startswith("-c") for arg in args):
+                raise ValueError(
+                    "Command rejected by default security policy: git command-scoped config"
+                )
+            if self._has_any_option(
+                args, {"--upload-pack", "--receive-pack", "--exec"}
+            ) or any(arg.startswith("ext::") for arg in args):
+                raise ValueError(
+                    "Command rejected by default security policy: git external program"
+                )
 
     def validate_pipeline(self, commands: List[str]) -> Dict[str, str]:
         """Validate pipeline tokens and ensure all command segments are allowed."""
