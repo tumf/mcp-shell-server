@@ -20,6 +20,7 @@ DANGEROUS_COMMANDS = {
     "php",
     "lua",
     "env",
+    "sed",
     "xargs",
 }
 
@@ -129,15 +130,28 @@ class CommandValidator:
         if cmd in DANGEROUS_COMMANDS:
             raise ValueError(f"Command rejected by default security policy: {cmd}")
 
-        if cmd == "find" and any(arg in {"-exec", "-execdir"} for arg in args):
-            raise ValueError("Command rejected by default security policy: find -exec")
+        if cmd == "find":
+            if any(arg in {"-exec", "-execdir"} for arg in args):
+                raise ValueError("Command rejected by default security policy: find -exec")
+            if any(
+                arg in {"-fprintf", "-fprint", "-fprint0", "-fls"} for arg in args
+            ):
+                raise ValueError(
+                    "Command rejected by default security policy: find file output"
+                )
 
-        if cmd == "awk" and any(
-            "system(" in (compact := re.sub(r"\s+", "", arg)) or "|" in compact
-            for arg in args
+        if cmd == "awk" and (
+            self._has_short_option_prefix(args, "-f")
+            or any(
+                "system(" in (compact := re.sub(r"\s+", "", arg))
+                or "|" in compact
+                or ">" in arg
+                or "<" in arg
+                for arg in args
+            )
         ):
             raise ValueError(
-                "Command rejected by default security policy: awk command execution"
+                "Command rejected by default security policy: awk external access"
             )
 
         if cmd == "tar" and (

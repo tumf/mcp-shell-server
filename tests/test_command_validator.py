@@ -220,6 +220,32 @@ def test_git_external_program_vectors_are_rejected(validator, monkeypatch, comma
         validator.validate_command(command)
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["sed", "1e touch /tmp/marker", "input"],
+        ["sed", "-e", "1w /tmp/marker", "input"],
+        ["sed", "-e1r /etc/passwd", "input"],
+        ["sed", "-f", "script.sed", "input"],
+        ["find", ".", "-fprintf", "/tmp/marker", "pwned"],
+        ["find", ".", "-fprint", "/tmp/marker"],
+        ["find", ".", "-fprint0", "/tmp/marker"],
+        ["find", ".", "-fls", "/tmp/marker"],
+        ["awk", 'BEGIN { print "pwned" > "/tmp/marker" }'],
+        ["awk", 'BEGIN { getline value < "/etc/passwd" }'],
+        ["awk", "-f", "script.awk"],
+    ],
+)
+def test_embedded_execution_and_io_vectors_are_rejected(
+    validator, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "sed,find,awk")
+
+    with pytest.raises(ValueError, match="default security policy"):
+        validator.validate_command(command)
+
+
 def test_git_status_is_allowed(validator, monkeypatch):
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "git")
