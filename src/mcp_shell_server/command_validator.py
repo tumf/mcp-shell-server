@@ -132,10 +132,10 @@ class CommandValidator:
 
         if cmd == "find":
             if any(arg in {"-exec", "-execdir"} for arg in args):
-                raise ValueError("Command rejected by default security policy: find -exec")
-            if any(
-                arg in {"-fprintf", "-fprint", "-fprint0", "-fls"} for arg in args
-            ):
+                raise ValueError(
+                    "Command rejected by default security policy: find -exec"
+                )
+            if any(arg in {"-fprintf", "-fprint", "-fprint0", "-fls"} for arg in args):
                 raise ValueError(
                     "Command rejected by default security policy: find file output"
                 )
