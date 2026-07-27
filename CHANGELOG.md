@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-07-27
+
+### Security
+- Reject `sed`, including embedded command execution and file access scripts.
+- Reject GNU `find` file-output actions (`-fprintf`, `-fprint`, `-fprint0`, and `-fls`).
+- Reject AWK external file access and script-file execution.
+
 ## [1.1.2] - 2026-07-18
 
 ### Security
