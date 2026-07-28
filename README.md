@@ -1,5 +1,7 @@
 # MCP Shell Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Ftumf%2Fmcp-shell-server.svg)](https://mcptoplist.com/server/glama%2Ftumf%2Fmcp-shell-server)
+
 [![codecov](https://codecov.io/gh/tumf/mcp-shell-server/branch/main/graph/badge.svg)](https://codecov.io/gh/tumf/mcp-shell-server)
 [![smithery badge](https://smithery.ai/badge/mcp-shell-server)](https://smithery.ai/server/mcp-shell-server)
 
