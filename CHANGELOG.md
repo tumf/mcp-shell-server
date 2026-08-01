@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Pin the MCP Python SDK to the v1 line (`mcp>=1.1.2,<2`). Fresh installs resolved MCP SDK 2.x, which removes the low-level `Server.list_tools()` API and crashed the server at import with `AttributeError: 'Server' object has no attribute 'list_tools'` ([#47](https://github.com/tumf/mcp-shell-server/issues/47)).
+
 ## [1.1.3] - 2026-07-27
 
 ### Security
