@@ -28,7 +28,7 @@ Change Type: implementation
 
 ## Proposed Solution
 
-Constrain the supported SDK dependency to the compatible v1 release line and refresh the lockfile. Add a regression test that reads project metadata and prevents removal of the v2 exclusion while the server still uses the v1 API. Record the compatibility fix in the changelog.
+Constrain the supported SDK dependency to the compatible v1 release line and refresh the lockfile. Add a stdlib-only regression test that reads project metadata and prevents removal of the v2 exclusion while the server still uses the v1 API. Record the compatibility fix in the changelog.
 
 ## Acceptance Criteria
 
