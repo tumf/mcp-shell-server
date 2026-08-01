@@ -15,7 +15,7 @@ def test_mcp_v2_is_excluded_while_server_uses_v1_api() -> None:
         "dependencies"
     ]
     mcp_requirement = next(item for item in dependencies if item.startswith("mcp"))
-    assert "<2" in mcp_requirement
+    assert mcp_requirement.endswith(",<2")
 
 
 def test_lockfile_resolves_mcp_v1() -> None:
