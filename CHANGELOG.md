@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-08-02
+
+### Security
+- Require MCP Python SDK `>=1.28.1` to address [GHSA-vj7q-gjh5-988w](https://github.com/advisories/GHSA-vj7q-gjh5-988w), where the WebSocket server transport did not validate Host/Origin headers.
+
+## [1.1.4] - 2026-08-01
+
 ### Fixed
 - Pin the MCP Python SDK to the v1 line (`mcp>=1.1.2,<2`). Fresh installs resolved MCP SDK 2.x, which removes the low-level `Server.list_tools()` API and crashed the server at import with `AttributeError: 'Server' object has no attribute 'list_tools'` ([#47](https://github.com/tumf/mcp-shell-server/issues/47)).
 
