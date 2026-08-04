@@ -164,6 +164,8 @@ class CommandValidator:
 
     def _policy_command_name(self, command: str) -> str:
         cmd = os.path.basename(self._validate_command_name_form(command))
+        if re.fullmatch(r"python\d+(?:\.\d+)*", cmd):
+            return "python"
         return COMMAND_POLICY_ALIASES.get(cmd, cmd)
 
     def _validate_default_argument_policy(self, command: List[str]) -> None:

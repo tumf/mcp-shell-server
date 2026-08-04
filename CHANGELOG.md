@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.7] - 2026-08-04
+
+### Security
+- Reject version-suffixed Python interpreter names such as `python2` and `python3.11`, including absolute-path forms, when admitted through command patterns.
+
 ## [1.1.6] - 2026-08-04
 
 ### Security

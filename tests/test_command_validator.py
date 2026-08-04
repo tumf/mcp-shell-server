@@ -126,6 +126,15 @@ def test_default_dangerous_exec_vectors_are_rejected(validator, monkeypatch):
             validator.validate_command(command)
 
 
+@pytest.mark.parametrize("command", ["python2", "python3.11", "/usr/bin/python3.11"])
+def test_versioned_python_interpreters_are_rejected(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_PATTERNS", r"(?:.*/)?python[0-9.]*")
+
+    with pytest.raises(ValueError, match="default security policy"):
+        validator.validate_command([command, "-c", "print(1)"])
+
+
 def test_allow_patterns_use_fullmatch(validator, monkeypatch):
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_PATTERNS", "ls")
