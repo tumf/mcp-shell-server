@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-08-04
+
+### Security
+- Reject persistent `git config` invocations, common alternate binary names for hardened command families (`gawk`, `gfind`, `gtar`, `bsdtar`), and command-wrapper/shell-escape tools that can execute non-allowlisted commands through their arguments.
+- Document that command hardening is best-effort defense in depth and not a complete sandbox for broad or untrusted command allowlists.
+
 ## [1.1.5] - 2026-08-02
 
 ### Security
