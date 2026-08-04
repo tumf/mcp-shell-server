@@ -11,6 +11,9 @@ COPY . .
 # Install the project's dependencies
 RUN --mount=type=cache,target=/root/.cache/uv pip install .
 
+RUN useradd --create-home --shell /usr/sbin/nologin mcp
+USER mcp
+
 # Set environment variables
 ENV ALLOW_COMMANDS="ls,cat,pwd,grep,wc,touch,find"
 
