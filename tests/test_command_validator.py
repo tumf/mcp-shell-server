@@ -223,6 +223,58 @@ def test_git_external_program_vectors_are_rejected(validator, monkeypatch, comma
 @pytest.mark.parametrize(
     "command",
     [
+        ["git", "config", "alias.pwn", "!sh -c id"],
+        ["git", "config", "core.fsmonitor", "sh -c id"],
+        ["git", "config", "--global", "alias.pwn", "!sh -c id"],
+    ],
+)
+def test_git_persistent_config_is_rejected(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    with pytest.raises(ValueError, match="git config"):
+        validator.validate_command(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["gfind", ".", "-exec", "sh", "-c", "id", ";"],
+        ["gawk", 'BEGIN { system("id") }'],
+        ["gtar", "--checkpoint-action=exec=sh shell.sh"],
+        ["bsdtar", "--to-command=sh shell.sh"],
+    ],
+)
+def test_alternate_binary_names_share_default_policy(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "gfind,gawk,gtar,bsdtar")
+
+    with pytest.raises(ValueError, match="default security policy"):
+        validator.validate_command(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["timeout", "5", "touch", "/tmp/marker"],
+        ["nice", "touch", "/tmp/marker"],
+        ["nohup", "touch", "/tmp/marker"],
+        ["setsid", "touch", "/tmp/marker"],
+        ["stdbuf", "-o0", "touch", "/tmp/marker"],
+        ["flock", "/tmp/lock", "touch", "/tmp/marker"],
+    ],
+)
+def test_command_wrappers_are_rejected(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "timeout,nice,nohup,setsid,stdbuf,flock")
+
+    with pytest.raises(ValueError, match="default security policy"):
+        validator.validate_command(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
         ["sed", "1e touch /tmp/marker", "input"],
         ["sed", "-e", "1w /tmp/marker", "input"],
         ["sed", "-e1r /etc/passwd", "input"],

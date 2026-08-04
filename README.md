@@ -113,7 +113,9 @@ ALLOW_COMMANDS="ls,  cat  , echo"     # Multiple spaces
 ALLOW_PATTERNS="python[0-9.]*,node"    # Command-name patterns only
 ```
 
-Allowlisting a command name is not a sandbox for that program's own argument-level execution features. The server applies default argument hardening even when the binary is allowed: known exec-capable vectors such as `find -exec`, shell/interpreter launchers, `awk system()`, `tar --checkpoint-action=exec`, `env`, `xargs`, and all Git command-scoped configuration overrides are rejected before subprocess creation. For example, `ALLOW_COMMANDS="git"` does not permit `git -c user.name=Example status` or `git -c alias.pwn=!sh -c "touch marker" pwn`; every global `git -c <name=value>` and `git -c<name=value>` override is rejected regardless of its key or value.
+Allowlisting a command name is not a sandbox for that program's own argument-level execution features. The server applies default argument hardening even when the binary is allowed: known exec-capable vectors such as `find -exec`, shell/interpreter launchers, `awk system()`, `tar --checkpoint-action=exec`, `env`, `xargs`, command-wrapper tools such as `timeout`/`nice`/`nohup`, shell-escape tools such as `sed`/`less`/`vim`/`ssh`, common alternate names such as `gfind`/`gawk`/`gtar`, all Git command-scoped configuration overrides, and persistent `git config` writes are rejected before subprocess creation. For example, `ALLOW_COMMANDS="git"` does not permit `git -c user.name=Example status`, `git -c alias.pwn=!sh -c "touch marker" pwn`, or `git config alias.pwn '!sh -c "touch marker"'`; every global `git -c <name=value>` and `git -c<name=value>` override is rejected regardless of its key or value.
+
+This hardening is best-effort defense in depth, not a complete sandbox for arbitrary untrusted command execution. For untrusted clients or broad command allowlists, run the server inside an OS/container sandbox with least-privilege filesystem and network access.
 
 ### Child process environment
 

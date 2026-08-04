@@ -20,8 +20,46 @@ DANGEROUS_COMMANDS = {
     "php",
     "lua",
     "env",
+    "chroot",
+    "ex",
+    "flock",
+    "gdb",
+    "ionice",
+    "less",
+    "man",
+    "more",
+    "mysql",
+    "nice",
+    "nohup",
+    "pg",
+    "psql",
+    "rsync",
+    "script",
     "sed",
+    "setsid",
+    "sqlite3",
+    "ssh",
+    "stdbuf",
+    "taskset",
+    "time",
+    "timeout",
+    "unshare",
+    "vi",
+    "view",
+    "vim",
+    "watch",
     "xargs",
+    "zip",
+}
+
+COMMAND_POLICY_ALIASES = {
+    "bfind": "find",
+    "bsdtar": "tar",
+    "gawk": "awk",
+    "gfind": "find",
+    "gtar": "tar",
+    "mawk": "awk",
+    "nawk": "awk",
 }
 
 
@@ -124,8 +162,12 @@ class CommandValidator:
             index += 2 if arg in options_with_value else 1
         return None
 
+    def _policy_command_name(self, command: str) -> str:
+        cmd = os.path.basename(self._validate_command_name_form(command))
+        return COMMAND_POLICY_ALIASES.get(cmd, cmd)
+
     def _validate_default_argument_policy(self, command: List[str]) -> None:
-        cmd = os.path.basename(self._validate_command_name_form(command[0]))
+        cmd = self._policy_command_name(command[0])
         args = command[1:]
         if cmd in DANGEROUS_COMMANDS:
             raise ValueError(f"Command rejected by default security policy: {cmd}")
@@ -171,6 +213,10 @@ class CommandValidator:
             subcommand_index = self._git_subcommand_index(args)
             git_args = args if subcommand_index is None else args[subcommand_index:]
             clone_args = git_args[1:] if git_args and git_args[0] == "clone" else []
+            if git_args and git_args[0] == "config":
+                raise ValueError(
+                    "Command rejected by default security policy: git config"
+                )
             if (
                 self._has_any_option(
                     args,

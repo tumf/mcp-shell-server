@@ -22,7 +22,7 @@ Allowed regex patterns MUST match the full command name and MUST NOT admit comma
 
 ### Requirement: Command policy MUST reject exec-capable allowlist bypass vectors
 
-The server MUST validate command arguments and reject exec-capable allowlist bypass vectors before process creation, even when the command name itself is allowed. For an allowlisted `git`, the server MUST reject every command-scoped configuration override supplied through either `-c <name=value>` or `-c<name=value>` without attempting to classify the configuration key as safe.
+The server MUST validate command arguments and reject exec-capable allowlist bypass vectors before process creation, even when the command name itself is allowed. For an allowlisted `git`, the server MUST reject every command-scoped configuration override supplied through either `-c <name=value>` or `-c<name=value>` without attempting to classify the configuration key as safe. The server MUST also reject persistent `git config` invocations, known alternate binary names for hardened command families, and command-wrapper or shell-escape tools that would execute a non-allowlisted command through their arguments.
 
 #### Scenario: Separated git configuration override is rejected
 
@@ -47,6 +47,24 @@ The server MUST validate command arguments and reject exec-capable allowlist byp
 **Given**: `ALLOW_COMMANDS` includes `git`
 **When**: a client executes `['git', 'status']`
 **Then**: the command is allowed subject to other policy checks
+
+#### Scenario: Persistent git configuration write is rejected
+
+**Given**: `ALLOW_COMMANDS` includes `git`
+**When**: a client executes `['git', 'config', 'alias.pwn', '!sh -c id']`
+**Then**: the server rejects the command before creating a subprocess
+
+#### Scenario: Alternate binary name uses the same default policy
+
+**Given**: `ALLOW_COMMANDS` includes `gawk`
+**When**: a client executes `['gawk', 'BEGIN { system("id") }']`
+**Then**: the server rejects the command before creating a subprocess
+
+#### Scenario: Command wrapper is rejected
+
+**Given**: `ALLOW_COMMANDS` includes `timeout`
+**When**: a client executes `['timeout', '5', 'touch', '/tmp/marker']`
+**Then**: the server rejects the command before creating a subprocess
 
 #### Scenario: Git external execution surfaces remain rejected
 
