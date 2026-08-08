@@ -1,12 +1,30 @@
 ### Requirement: Pipeline execution MUST preserve argv and avoid shell interpretation
 
-The server MUST represent each pipeline segment as an argv array and MUST NOT execute user-controlled pipeline segment strings through shell interpretation.
+The server MUST represent each pipeline segment as an argv array, MUST recognize pipeline syntax only from a discrete `|` argv element, MUST preserve pipe characters embedded in all other argv elements as literal argument data, and MUST NOT execute user-controlled pipeline segment strings through shell interpretation.
 
 #### Scenario: Pipeline arguments are preserved
 
 **Given**: `ALLOW_COMMANDS` includes `echo` and `grep`
 **When**: a client executes `['echo', 'hello', '|', 'grep', 'h']`
 **Then**: the `grep` segment receives `h` as an argument and the pipeline succeeds
+
+#### Scenario: Literal pipe in an argument remains data
+
+**Given**: `ALLOW_COMMANDS` includes `grep`
+**When**: a client executes `['grep', '-E', 'error|warning', 'file.txt']`
+**Then**: the server preserves `error|warning` as one argument and does not create another pipeline segment
+
+#### Scenario: Trailing literal pipe cannot smuggle a command stage
+
+**Given**: `ALLOW_COMMANDS` includes `echo` and `id`
+**When**: a client executes `['echo', 'text|', 'id']`
+**Then**: the server preserves `text|` as argument data and does not execute `id` as an independent subprocess
+
+#### Scenario: Command policy sees original embedded-pipe content
+
+**Given**: `ALLOW_COMMANDS` includes `awk`
+**When**: a client executes `['awk', 'BEGIN{print "x" | "id"}']`
+**Then**: the `awk` external-access policy evaluates the original argument, rejects the invocation, and no subprocess, pipeline, or file side effect is created
 
 #### Scenario: Pipeline shell metacharacter injection has no side effect
 
