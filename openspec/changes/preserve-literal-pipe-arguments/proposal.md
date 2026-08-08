@@ -31,13 +31,13 @@ GitHub Security Advisories GHSA-q8pm-q3r2-q7cg and GHSA-7wg7-jj87-qp4c report th
 
 ## Proposed Solution
 
-Stop splitting pipe characters embedded inside argv elements. Recognize pipeline syntax only when the client supplies `|` as its own argv element. Preserve the existing explicit-pipeline execution path and command-policy validation. Add focused regression tests covering literal data, unintended pipeline construction, command-specific policy enforcement, and side-effect suppression.
+Stop splitting pipe characters embedded inside argv elements. Recognize pipeline syntax only when the client supplies `|` as its own argv element. The prior implicit conversion of an attached pipe such as `"ls|"` into a pipeline is intentionally removed; clients MUST express pipelines with a discrete `|` token. Preserve the existing explicit-pipeline execution path and command-policy validation. Add focused regression tests covering literal data, unintended pipeline construction, command-specific policy enforcement, and side-effect suppression.
 
 After implementation verification, prepare the repository metadata for a patched release. Publishing the package and Security Advisories remains an explicit owner-controlled external action.
 
 ## Acceptance Criteria
 
-- Every argv element other than the discrete token `|` reaches validation and execution unchanged, including leading, trailing, and embedded pipe characters.
+- Every non-command-name argv element other than the discrete token `|` reaches command validation as literal argument data with leading, trailing, and embedded pipe characters intact. Existing command-name validation continues to reject command names containing `|`.
 - `['grep', '-E', 'error|warning', 'file.txt']` remains one command with the regular expression intact.
 - `['echo', 'text|', 'id']` does not create a second pipeline stage or execute `id` independently.
 - Command-specific policies inspect the original argument content and reject prohibited embedded-pipe payloads.
@@ -50,7 +50,7 @@ After implementation verification, prepare the repository metadata for a patched
 - `src/mcp_shell_server/command_preprocessor.py` no longer converts pipe characters inside argv values into syntax.
 - Regression tests fail against `v1.1.7` behavior and pass after the fix.
 - Tests cover literal regex data, trailing-pipe smuggling, the reported `awk` policy path, explicit pipelines, and no-side-effect rejection.
-- `uv run pytest tests/test_shell_executor_pipeline.py tests/test_command_validator.py` passes.
+- `uv run pytest tests/test_shell_executor.py tests/test_shell_executor_pipeline.py tests/test_command_validator.py` passes.
 - `uv run make all` passes.
 - Release-facing documentation records the security fix without publishing any external artifact.
 
@@ -59,5 +59,6 @@ After implementation verification, prepare the repository metadata for a patched
 - Removing explicit pipeline support.
 - Redesigning the command allowlist or all command-specific policies.
 - Publishing a package, GitHub Release, Security Advisory, issue comment, or other external communication.
+- Bumping `src/mcp_shell_server/version.py`; the repository owner performs that change in the release commit.
 - Assigning final CVSS severity or deciding which duplicate Advisory remains primary.
 - Fixing unrelated dependency or security findings.

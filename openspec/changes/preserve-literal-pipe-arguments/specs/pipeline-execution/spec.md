@@ -24,9 +24,9 @@ The server MUST represent each pipeline segment as an argv array, MUST recognize
 
 #### Scenario: Command policy sees original embedded-pipe content
 
-**Given**: an allowed command has a policy that rejects an exec-capable argument containing `|`
-**When**: a client supplies the prohibited content inside one argv element
-**Then**: the policy evaluates the unchanged argument and rejects the invocation before subprocess creation or file side effects
+**Given**: `ALLOW_COMMANDS` includes `awk`
+**When**: a client executes `['awk', 'BEGIN{print "x" | "id"}']`
+**Then**: the `awk` external-access policy evaluates the original argument, rejects the invocation, and no subprocess, pipeline, or file side effect is created
 
 #### Scenario: Pipeline shell metacharacter injection has no side effect
 
