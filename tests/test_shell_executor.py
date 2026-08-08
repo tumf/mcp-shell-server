@@ -828,12 +828,14 @@ def test_preprocess_command(shell_executor_with_mock):
         "test",
     ]
 
-    # Test command with attached pipe
+    # Test command with attached pipe. Implicit attached-pipe conversion was
+    # intentionally removed: a pipe character inside an argv element is literal
+    # data, so every token stays unsplit and pipeline syntax must be expressed
+    # with a discrete "|" element.
     assert shell_executor_with_mock.preprocessor.preprocess_command(
         ["ls|", "grep", "test"]
     ) == [
-        "ls",
-        "|",
+        "ls|",
         "grep",
         "test",
     ]
@@ -970,15 +972,21 @@ def test_preprocess_command_pipeline(shell_executor_with_mock):
         ["cat", "file", "|", "grep", "pattern", "|", "wc", "-l"]
     ) == ["cat", "file", "|", "grep", "pattern", "|", "wc", "-l"]
 
-    # Test command with attached pipe operator
+    # Test command with attached pipe operator. Implicit attached-pipe
+    # conversion was intentionally removed, so the tokens remain literal data
+    # and no synthetic pipeline boundary is inserted.
     assert shell_executor_with_mock.preprocessor.preprocess_command(
         ["echo|", "grep", "pattern"]
     ) == [
-        "echo",
-        "|",
+        "echo|",
         "grep",
         "pattern",
     ]
+
+    # Embedded pipe characters in argument data are never split.
+    assert shell_executor_with_mock.preprocessor.preprocess_command(
+        ["grep", "-E", "error|warning", "file.txt"]
+    ) == ["grep", "-E", "error|warning", "file.txt"]
 
 
 @pytest.mark.asyncio

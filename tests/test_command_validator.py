@@ -307,6 +307,26 @@ def test_embedded_execution_and_io_vectors_are_rejected(
         validator.validate_command(command)
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["awk", 'BEGIN{print "x" | "id"}'],
+        ["awk", 'BEGIN { print "x" | "id" }'],
+        ["awk", 'BEGIN { "id" | getline out; print out }'],
+        ["gawk", 'BEGIN{print "x" | "id"}'],
+    ],
+)
+def test_awk_embedded_pipe_payload_is_rejected_in_original_argv_form(
+    validator, monkeypatch, command
+):
+    """The awk policy inspects the original argument, pipe characters included."""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "awk,gawk")
+
+    with pytest.raises(ValueError, match="awk external access"):
+        validator.validate_command(command)
+
+
 def test_git_status_is_allowed(validator, monkeypatch):
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "git")
