@@ -105,6 +105,9 @@ def test_split_pipe_commands_ignores_embedded_pipe_characters():
     assert preprocessor.split_pipe_commands(["echo", "text|", "id"]) == [
         ["echo", "text|", "id"]
     ]
+    assert preprocessor.split_pipe_commands(["echo", " | ", "id"]) == [
+        ["echo", " | ", "id"]
+    ]
 
 
 @pytest.mark.asyncio

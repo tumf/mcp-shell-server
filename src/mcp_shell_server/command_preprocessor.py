@@ -68,7 +68,7 @@ class CommandPreProcessor:
         current_command: List[str] = []
 
         for arg in command:
-            if arg.strip() == "|":
+            if arg == "|":
                 if current_command:
                     commands.append(current_command)
                     current_command = []
