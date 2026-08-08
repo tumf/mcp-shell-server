@@ -22,3 +22,10 @@ def test_lockfile_resolves_mcp_v1() -> None:
     packages = tomllib.loads((ROOT / "uv.lock").read_text())["package"]
     mcp = next(package for package in packages if package["name"] == "mcp")
     assert mcp["version"].startswith("1.")
+
+
+def test_package_exports_release_version() -> None:
+    from mcp_shell_server import __version__ as package_version
+    from mcp_shell_server.version import __version__ as release_version
+
+    assert package_version == release_version

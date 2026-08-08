@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.8] - 2026-08-08
+
 ### Security
-- Preserve literal pipe characters inside argv arguments. `CommandPreProcessor.preprocess_command()` split any argument containing `|` and inserted a synthetic pipeline boundary, which corrupted argument data such as regular expressions, URLs, and JSON, let a trailing pipe like `"text|"` smuggle a following argument into an independently executed pipeline stage, and stripped pipe characters before command-specific policies (for example `awk`) could inspect them. Pipeline syntax is now recognized only from a discrete `|` argv element. Reported as [GHSA-q8pm-q3r2-q7cg](https://github.com/tumf/mcp-shell-server/security/advisories/GHSA-q8pm-q3r2-q7cg) and [GHSA-7wg7-jj87-qp4c](https://github.com/tumf/mcp-shell-server/security/advisories/GHSA-7wg7-jj87-qp4c). Versions `<=1.1.7` are affected; upgrade to the patched release once it is published.
+- Preserve literal pipe characters inside argv arguments. `CommandPreProcessor.preprocess_command()` split any argument containing `|` and inserted a synthetic pipeline boundary, which corrupted argument data such as regular expressions, URLs, and JSON, let a trailing pipe like `"text|"` smuggle a following argument into an independently executed pipeline stage, and stripped pipe characters before command-specific policies (for example `awk`) could inspect them. Pipeline syntax is now recognized only from a discrete `|` argv element. Reported as [GHSA-q8pm-q3r2-q7cg](https://github.com/tumf/mcp-shell-server/security/advisories/GHSA-q8pm-q3r2-q7cg) and [GHSA-7wg7-jj87-qp4c](https://github.com/tumf/mcp-shell-server/security/advisories/GHSA-7wg7-jj87-qp4c). Versions `<=1.1.7` are affected; upgrade to `1.1.8` or later.
 
 ### Changed
 - **Breaking:** An attached pipe such as `["ls|", "grep", "x"]` is no longer implicitly converted into a pipeline. Clients MUST express pipelines with a discrete `|` argv element, for example `["ls", "|", "grep", "x"]`.

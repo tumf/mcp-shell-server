@@ -1,9 +1,9 @@
 """MCP Shell Server Package."""
 
 from . import server
+from .version import __version__
 
-__version__ = "0.1.0"
-__all__ = ["main", "server"]
+__all__ = ["__version__", "main", "server"]
 
 
 def main():
