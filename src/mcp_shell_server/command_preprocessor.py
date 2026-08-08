@@ -9,21 +9,18 @@ class CommandPreProcessor:
 
     def preprocess_command(self, command: List[str]) -> List[str]:
         """
-        Preprocess the command to handle cases where '|' is attached to a command.
+        Return argv unchanged; only a discrete '|' element is pipeline syntax.
+
+        A pipe character embedded in any other argv element is literal argument
+        data (regular expressions, URLs, JSON, awk programs, ...), so it is
+        never split into a synthetic pipeline boundary. The historical implicit
+        conversion of an attached pipe such as "ls|" into a pipeline is
+        intentionally removed: it corrupted argument data and let a trailing
+        pipe smuggle an extra allowlisted pipeline stage past command-specific
+        argument policies (GHSA-q8pm-q3r2-q7cg, GHSA-7wg7-jj87-qp4c). Clients
+        MUST express pipelines with a discrete "|" element.
         """
-        preprocessed_command = []
-        for token in command:
-            if token in ["||", "&&", ";"]:  # Special shell operators
-                preprocessed_command.append(token)
-            elif "|" in token and token != "|":
-                parts = token.split("|")
-                preprocessed_command.extend(
-                    [part.strip() for part in parts if part.strip()]
-                )
-                preprocessed_command.append("|")
-            else:
-                preprocessed_command.append(token)
-        return preprocessed_command
+        return list(command)
 
     def clean_command(self, command: List[str]) -> List[str]:
         """

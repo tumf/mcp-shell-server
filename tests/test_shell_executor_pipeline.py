@@ -5,6 +5,7 @@ import tempfile
 
 import pytest
 
+from mcp_shell_server.command_preprocessor import CommandPreProcessor
 from mcp_shell_server.shell_executor import ShellExecutor
 
 
@@ -55,6 +56,209 @@ async def test_pipeline_split(executor):
     commands = executor.preprocessor.split_pipe_commands(["echo", "hello", "|"])
     assert len(commands) == 1
     assert commands[0] == ["echo", "hello"]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        # Embedded pipe: a regular expression alternation.
+        ["grep", "-E", "error|warning", "file.txt"],
+        # Trailing pipe attached to argument data.
+        ["echo", "text|", "id"],
+        # Leading pipe attached to argument data.
+        ["echo", "|text"],
+        # Multiple embedded pipes plus surrounding whitespace.
+        ["echo", " a|b|c "],
+        # Pipe inside a URL-ish / JSON-ish payload.
+        ["echo", '{"filter":"a|b"}'],
+    ],
+)
+def test_preprocess_command_preserves_literal_pipe_arguments(argv):
+    """Pipe characters inside argv elements stay literal argument data."""
+    assert CommandPreProcessor().preprocess_command(argv) == argv
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [],
+        ["ls"],
+        ["ls", "|", "grep", "test"],
+        ["cat", "file", "|", "grep", "pattern", "|", "wc", "-l"],
+        ["echo", "hello", "&&", "ls"],
+        ["echo", "hello", "||", "ls"],
+        ["echo", "hello", ";", "ls"],
+    ],
+)
+def test_preprocess_command_only_discrete_pipe_token_is_syntax(argv):
+    """Only a discrete `|` argv element is pipeline syntax; argv is otherwise unchanged."""
+    assert CommandPreProcessor().preprocess_command(argv) == argv
+
+
+def test_split_pipe_commands_ignores_embedded_pipe_characters():
+    """Segment splitting keys off discrete `|` tokens only."""
+    preprocessor = CommandPreProcessor()
+
+    assert preprocessor.split_pipe_commands(
+        ["grep", "-E", "error|warning", "file.txt"]
+    ) == [["grep", "-E", "error|warning", "file.txt"]]
+    assert preprocessor.split_pipe_commands(["echo", "text|", "id"]) == [
+        ["echo", "text|", "id"]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_embedded_pipe_argument_is_not_a_pipeline_stage(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
+    """A regex alternation argument reaches the process as one intact argv element."""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "grep")
+
+    result = await shell_executor_with_mock.execute(
+        ["grep", "-E", "error|warning", "file.txt"],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["error"] is None
+    mock_process_manager.execute_pipeline.assert_not_awaited()
+    mock_process_manager.create_process.assert_awaited_once()
+    assert mock_process_manager.create_process.await_args.args[0] == [
+        "grep",
+        "-E",
+        "error|warning",
+        "file.txt",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_trailing_pipe_argument_cannot_smuggle_a_command_stage(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
+    """`['echo', 'text|', 'id']` never turns `id` into an independent pipeline stage."""
+    clear_env(monkeypatch)
+    # `id` is deliberately NOT allowed: if it became its own stage the pipeline
+    # path would surface a "Command not allowed" rejection instead of running.
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+
+    result = await shell_executor_with_mock.execute(
+        ["echo", "text|", "id"],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["error"] is None
+    mock_process_manager.execute_pipeline.assert_not_awaited()
+    mock_process_manager.create_process.assert_awaited_once()
+    assert mock_process_manager.create_process.await_args.args[0] == [
+        "echo",
+        "text|",
+        "id",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_leading_pipe_argument_remains_literal(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
+    """A leading pipe character inside an argument is preserved verbatim."""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+
+    result = await shell_executor_with_mock.execute(
+        ["echo", "|text"],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["error"] is None
+    mock_process_manager.execute_pipeline.assert_not_awaited()
+    assert mock_process_manager.create_process.await_args.args[0] == ["echo", "|text"]
+
+
+@pytest.mark.asyncio
+async def test_pipe_in_command_name_is_still_rejected(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
+    """Command-name validation keeps rejecting `|` in the command position."""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,ls")
+
+    result = await shell_executor_with_mock.execute(
+        ["ls|", "hello"],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["status"] == 1
+    assert "Unsafe command name: ls|" in result["error"]
+    mock_process_manager.create_process.assert_not_awaited()
+    mock_process_manager.execute_pipeline.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_awk_embedded_pipe_payload_rejected_before_any_process(
+    shell_executor_with_mock, temp_test_dir, mock_process_manager, monkeypatch
+):
+    """The reported awk payload is policy-rejected before any process is created."""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "awk,id")
+
+    result = await shell_executor_with_mock.execute(
+        ["awk", 'BEGIN{print "x" | "id"}'],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["status"] == 1
+    assert "awk external access" in result["error"]
+    mock_process_manager.create_process.assert_not_awaited()
+    mock_process_manager.execute_pipeline.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_awk_embedded_pipe_payload_has_no_file_side_effect(
+    temp_test_dir, monkeypatch
+):
+    """The rejected awk payload never reaches awk, so its sentinel is not created."""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "awk")
+    marker = os.path.join(temp_test_dir, "awk-pwned")
+    executor = ShellExecutor()
+
+    result = await executor.execute(
+        ["awk", f'BEGIN{{print "x" | "touch {marker}"}}'],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["status"] == 1
+    assert "awk external access" in result["error"]
+    assert not os.path.exists(marker)
+
+
+@pytest.mark.asyncio
+async def test_trailing_pipe_argument_has_no_subprocess_side_effect(
+    temp_test_dir, monkeypatch
+):
+    """A trailing literal pipe cannot smuggle an extra allowlisted pipeline stage."""
+    clear_env(monkeypatch)
+    # Both commands are allowed, so nothing but argv preservation prevents the
+    # vulnerable preprocessor from running `echo text | touch <marker>`.
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,touch")
+    marker = os.path.join(temp_test_dir, "smuggled")
+    executor = ShellExecutor()
+
+    result = await executor.execute(
+        ["echo", "text|", "touch", marker],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["error"] is None
+    assert result["stdout"].strip() == f"text| touch {marker}"
+    assert not os.path.exists(marker)
 
 
 @pytest.mark.asyncio
