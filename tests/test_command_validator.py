@@ -346,6 +346,7 @@ def test_awk_embedded_pipe_payload_is_rejected_in_original_argv_form(
         ["gawk", "-Wfile=/dev/stdin"],
         ["gawk", "-Wfi=/dev/stdin"],
         ["gawk", '@include "library.awk"'],
+        ["gawk", '@nsinclude "library.awk"'],
         ["gawk", '@load "extension"'],
     ],
 )
@@ -364,6 +365,10 @@ def test_awk_external_program_sources_are_rejected(validator, monkeypatch, comma
         ["gawk", "-F,", "{ print $1 }"],
         ["gawk", "-F", "-f", "{ print $1 }"],
         ["gawk", "--assign", "name=value", "{ print name }"],
+        ["gawk", "--assign", "name=-f", "{ print name }"],
+        ["gawk", "--field-separator", "-f", "{ print $1 }"],
+        ["gawk", "--", "-f"],
+        ["gawk", '{ print "safe" }', "-f"],
         ["gawk", "-o/tmp/profile", 'BEGIN { print "safe" }'],
         ["gawk", "-p/tmp/profile", 'BEGIN { print "safe" }'],
         ["gawk", "-d/tmp/variables", 'BEGIN { print "safe" }'],

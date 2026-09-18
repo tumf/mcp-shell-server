@@ -146,7 +146,8 @@ AWK_PROHIBITED_LONG_OPTIONS = {"exec", "file", "include", "load", "source"}
 AWK_PROHIBITED_SHORT_OPTIONS = {"E", "e", "f", "i", "l"}
 AWK_SHORT_OPTIONS_WITH_REQUIRED_VALUE = {"E", "e", "f", "F", "i", "l", "v"}
 AWK_SHORT_OPTIONS_WITH_OPTIONAL_ATTACHED_VALUE = {"d", "D", "L", "o", "p"}
-AWK_EXTERNAL_DIRECTIVE_PATTERN = re.compile(r"(^|\s)@(include|load)\b")
+AWK_LONG_OPTIONS_WITH_REQUIRED_VALUE = {"assign", "field-separator"}
+AWK_EXTERNAL_DIRECTIVE_PATTERN = re.compile(r"(^|\s)@(include|nsinclude|load)\b")
 
 
 class CommandValidator:
@@ -274,14 +275,19 @@ class CommandValidator:
             index += 1
             if AWK_EXTERNAL_DIRECTIVE_PATTERN.search(arg):
                 return True
+            if arg == "--":
+                return False
             if arg.startswith("--"):
                 name = arg[2:].partition("=")[0]
                 if prohibited_long_option(name):
                     return True
-            elif arg == "-W" and index + 1 < len(args):
-                name = args[index + 1].partition("=")[0]
+                if "=" not in arg and name in AWK_LONG_OPTIONS_WITH_REQUIRED_VALUE:
+                    index += 1
+            elif arg == "-W" and index < len(args):
+                name = args[index].partition("=")[0]
                 if prohibited_long_option(name):
                     return True
+                index += 1
             elif arg.startswith("-W"):
                 name = arg[2:].partition("=")[0]
                 if prohibited_long_option(name):
@@ -296,6 +302,8 @@ class CommandValidator:
                         break
                     if letter in AWK_SHORT_OPTIONS_WITH_OPTIONAL_ATTACHED_VALUE:
                         break
+            else:
+                return False
         return False
 
     def _validate_sort_arguments(self, args: List[str]) -> None:

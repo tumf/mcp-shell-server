@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.11] - 2026-09-18
+
+### Security
+- Reject GNU awk `@nsinclude` program-source directives, completing the external-source hardening introduced in 1.1.10. Versions `<=1.1.10` are affected; upgrade to `1.1.11` or later.
+
+### Fixed
+- Preserve AWK option-parser state so option terminators, inline program boundaries, and values consumed by safe options are not misclassified as dangerous options.
+
 ## [1.1.10] - 2026-09-18
 
 ### Security
