@@ -113,6 +113,41 @@ SORT_POLICY_ERROR = (
     "Command rejected by default security policy: sort external program or path option"
 )
 
+AWK_LONG_OPTIONS = {
+    "assign",
+    "bignum",
+    "characters-as-bytes",
+    "copyright",
+    "csv",
+    "debug",
+    "dump-variables",
+    "exec",
+    "field-separator",
+    "file",
+    "gen-pot",
+    "help",
+    "include",
+    "lint",
+    "load",
+    "no-optimize",
+    "non-decimal-data",
+    "optimize",
+    "posix",
+    "pretty-print",
+    "profile",
+    "sandbox",
+    "source",
+    "trace",
+    "traditional",
+    "use-lc-numeric",
+    "version",
+}
+AWK_PROHIBITED_LONG_OPTIONS = {"exec", "file", "include", "load", "source"}
+AWK_PROHIBITED_SHORT_OPTIONS = {"E", "e", "f", "i", "l"}
+AWK_SHORT_OPTIONS_WITH_REQUIRED_VALUE = {"E", "e", "f", "F", "i", "l", "v"}
+AWK_SHORT_OPTIONS_WITH_OPTIONAL_ATTACHED_VALUE = {"d", "D", "L", "o", "p"}
+AWK_EXTERNAL_DIRECTIVE_PATTERN = re.compile(r"(^|\s)@(include|load)\b")
+
 
 class CommandValidator:
     """Validates argv commands against allowlists and default deny rules."""
@@ -224,6 +259,45 @@ class CommandValidator:
             return {name}
         return {option for option in SORT_LONG_OPTIONS if option.startswith(name)}
 
+    def _awk_uses_external_program_source(self, args: List[str]) -> bool:
+        def prohibited_long_option(name: str) -> bool:
+            candidates = (
+                {name}
+                if name in AWK_LONG_OPTIONS
+                else {option for option in AWK_LONG_OPTIONS if option.startswith(name)}
+            )
+            return bool(candidates & AWK_PROHIBITED_LONG_OPTIONS)
+
+        index = 0
+        while index < len(args):
+            arg = args[index]
+            index += 1
+            if AWK_EXTERNAL_DIRECTIVE_PATTERN.search(arg):
+                return True
+            if arg.startswith("--"):
+                name = arg[2:].partition("=")[0]
+                if prohibited_long_option(name):
+                    return True
+            elif arg == "-W" and index + 1 < len(args):
+                name = args[index + 1].partition("=")[0]
+                if prohibited_long_option(name):
+                    return True
+            elif arg.startswith("-W"):
+                name = arg[2:].partition("=")[0]
+                if prohibited_long_option(name):
+                    return True
+            elif len(arg) > 1 and arg[0] == "-":
+                for position, letter in enumerate(arg[1:], start=1):
+                    if letter in AWK_PROHIBITED_SHORT_OPTIONS:
+                        return True
+                    if letter in AWK_SHORT_OPTIONS_WITH_REQUIRED_VALUE:
+                        if position == len(arg) - 1:
+                            index += 1
+                        break
+                    if letter in AWK_SHORT_OPTIONS_WITH_OPTIONAL_ATTACHED_VALUE:
+                        break
+        return False
+
     def _validate_sort_arguments(self, args: List[str]) -> None:
         """Reject `sort` options that reach outside the validated argv boundary.
 
@@ -283,7 +357,7 @@ class CommandValidator:
                 )
 
         if cmd == "awk" and (
-            self._has_short_option_prefix(args, "-f")
+            self._awk_uses_external_program_source(args)
             or any(
                 "system(" in (compact := re.sub(r"\s+", "", arg))
                 or "|" in compact

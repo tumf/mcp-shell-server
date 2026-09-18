@@ -327,6 +327,57 @@ def test_awk_embedded_pipe_payload_is_rejected_in_original_argv_form(
         validator.validate_command(command)
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["gawk", "--file=/dev/stdin"],
+        ["gawk", "--file", "/dev/stdin"],
+        ["gawk", "--exec=/dev/stdin"],
+        ["gawk", "-E/dev/stdin"],
+        ["gawk", "-Sf/dev/stdin"],
+        ["gawk", "--include=/dev/stdin"],
+        ["gawk", "-i/dev/stdin"],
+        ["gawk", "--load=/tmp/extension.so"],
+        ["gawk", "-l/tmp/extension.so"],
+        ["gawk", "--source", 'BEGIN { print "safe" }'],
+        ["gawk", "-e", 'BEGIN { print "safe" }'],
+        ["gawk", "-W", "file=/dev/stdin"],
+        ["gawk", "-W", "fi=/dev/stdin"],
+        ["gawk", "-Wfile=/dev/stdin"],
+        ["gawk", "-Wfi=/dev/stdin"],
+        ["gawk", '@include "library.awk"'],
+        ["gawk", '@load "extension"'],
+    ],
+)
+def test_awk_external_program_sources_are_rejected(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "gawk")
+
+    with pytest.raises(ValueError, match="awk external access"):
+        validator.validate_command(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["awk", 'BEGIN { print "safe" }'],
+        ["gawk", "-F,", "{ print $1 }"],
+        ["gawk", "-F", "-f", "{ print $1 }"],
+        ["gawk", "--assign", "name=value", "{ print name }"],
+        ["gawk", "-o/tmp/profile", 'BEGIN { print "safe" }'],
+        ["gawk", "-p/tmp/profile", 'BEGIN { print "safe" }'],
+        ["gawk", "-d/tmp/variables", 'BEGIN { print "safe" }'],
+        ["gawk", "-D/tmp/debug", 'BEGIN { print "safe" }'],
+        ["gawk", "-Lfatal", 'BEGIN { print "safe" }'],
+    ],
+)
+def test_awk_safe_program_arguments_remain_allowed(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "awk,gawk")
+
+    validator.validate_command(command)
+
+
 def test_git_status_is_allowed(validator, monkeypatch):
     clear_env(monkeypatch)
     monkeypatch.setenv("ALLOW_COMMANDS", "git")

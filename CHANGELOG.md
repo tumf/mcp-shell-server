@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.10] - 2026-09-18
+
+### Security
+- Reject AWK program-source and extension-loading options that bypass argv program inspection, including GNU long options, accepted abbreviations, short forms and clusters, `-W` aliases, and `@include`/`@load` directives. Tracked as [GHSA-8wm7-jvxq-2r3m](https://github.com/tumf/mcp-shell-server/security/advisories/GHSA-8wm7-jvxq-2r3m). Versions `<=1.1.9` are affected; upgrade to `1.1.10` or later.
+
 ## [1.1.9] - 2026-08-15
 
 ### Security

@@ -25,6 +25,29 @@ def temp_test_dir():
 
 
 @pytest.mark.asyncio
+async def test_gawk_external_source_is_rejected_without_side_effect(
+    tmp_path, monkeypatch
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "gawk")
+    marker = tmp_path / "gawk-poc-marker"
+    executable = tmp_path / "gawk"
+    executable.write_text(f"#!/bin/sh\ntouch {marker}\n")
+    executable.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+
+    result = await ShellExecutor().execute(
+        ["gawk", "--file=/dev/stdin"],
+        str(tmp_path),
+        stdin='BEGIN { system("id") }',
+    )
+
+    assert result["status"] == 1
+    assert "awk external access" in result["error"]
+    assert not marker.exists()
+
+
+@pytest.mark.asyncio
 async def test_git_config_poc_is_rejected_without_side_effect(
     tmp_path, monkeypatch, caplog
 ):
