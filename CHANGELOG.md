@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Emit one operator warning during server startup stating that allowed commands run with the server process's OS authority and that untrusted input requires external OS isolation. The warning goes through the existing logger (stderr); MCP stdout framing, tool names, request/response schemas, and environment variables are unchanged.
+
+### Changed
+- Define the trusted-execution security contract in README.md, SECURITY.md, and the `shell_execute` tool description. `ALLOW_COMMANDS` and `ALLOW_PATTERNS` are documented as controlling only the executable names the server launches directly, not as containment of an allowed program's child processes, interpreters, configuration, filesystem access, or network access. Existing command-specific rejection rules are retained and described as non-exhaustive defense in depth, and the introductory description no longer presents the package itself as a complete secure sandbox.
+- SECURITY.md now separates guarantees from non-guarantees, states that a trusted MCP client does not make the content it processes trusted, gives concrete external-isolation requirements (least-privilege identity, filesystem scope, network restrictions, credential exclusion, descendant-process containment, resource limits), and defines the vulnerability-reporting scope against the same threat model.
+
 ## [1.1.12] - 2026-09-19
 
 ### Security

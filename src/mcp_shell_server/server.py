@@ -23,6 +23,34 @@ DEFAULT_TIMEOUT_VAR = "MCP_SHELL_DEFAULT_TIMEOUT_SECONDS"
 MAX_TIMEOUT_VAR = "MCP_SHELL_MAX_TIMEOUT_SECONDS"
 OUTPUT_LIMIT_VAR = "MCP_SHELL_OUTPUT_LIMIT_BYTES"
 
+# Operator-facing statement of the trusted-execution contract. Allowing a
+# command delegates this process's OS authority to that program; the server
+# controls which executable names it launches, not what an allowed program then
+# does. Kept as a module constant so the wording is asserted by tests and stays
+# aligned with README.md and SECURITY.md.
+TRUSTED_EXECUTION_WARNING = (
+    "mcp-shell-server is a trusted execution tool: every allowed command runs "
+    "with this server process's OS user, filesystem, network, and credential "
+    "authority. ALLOW_COMMANDS and ALLOW_PATTERNS admit executable names "
+    "directly launched by the server; they do not contain what an allowed "
+    "program then does through its own options, configuration, interpreters, "
+    "or child processes. If requests or file contents can originate from "
+    "untrusted input, run this server under external OS isolation "
+    "(least-privilege identity, scoped filesystem, restricted network and "
+    "credentials, descendant-process containment, and resource limits). "
+    "See SECURITY.md."
+)
+
+
+def emit_trusted_execution_warning() -> None:
+    """Emit the trusted-execution warning once during server startup.
+
+    The warning goes through the existing logger, which writes to stderr under
+    the module's ``logging.basicConfig`` setup. It MUST NOT reach stdout, which
+    carries MCP stdio framing.
+    """
+    logger.warning(TRUSTED_EXECUTION_WARNING)
+
 
 def _positive_int_from_env(name: str, default: int) -> int:
     raw = os.environ.get(name)
@@ -42,7 +70,11 @@ class ExecuteToolHandler:
     """Handler for shell command execution."""
 
     name = "shell_execute"
-    description = "Execute a shell command"
+    description = (
+        "Execute an allowed command as an argv array on the MCP server host. "
+        "Allowed commands run with the server process's OS authority; the "
+        "allowlist controls executable names, not what an allowed program does."
+    )
 
     def __init__(self):
         self.executor = ShellExecutor()
@@ -224,6 +256,7 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
 async def main() -> None:
     """Main entry point for the MCP shell server."""
     logger.info(f"Starting MCP shell server v{__version__}")
+    emit_trusted_execution_warning()
 
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
