@@ -229,9 +229,11 @@ class CommandValidator:
     def _git_subcommand_index(self, args: List[str]) -> int | None:
         options_with_value = {
             "-C",
+            "--attr-source",
             "--config-env",
             "--git-dir",
             "--namespace",
+            "--shallow-file",
             "--super-prefix",
             "--work-tree",
         }

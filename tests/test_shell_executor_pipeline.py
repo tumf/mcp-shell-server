@@ -242,6 +242,36 @@ async def test_awk_embedded_pipe_payload_has_no_file_side_effect(
 
 
 @pytest.mark.asyncio
+async def test_git_attr_source_config_is_rejected_without_side_effect(
+    monkeypatch, temp_test_dir
+):
+    """The git global-option bypass cannot persist an executable alias."""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+    config_path = os.path.join(temp_test_dir, "config")
+    executor = ShellExecutor()
+
+    result = await executor.execute(
+        [
+            "git",
+            "--attr-source",
+            "HEAD",
+            "config",
+            "--file",
+            config_path,
+            "alias.pwn",
+            "!id",
+        ],
+        directory=temp_test_dir,
+        timeout=5,
+    )
+
+    assert result["status"] == 1
+    assert "git config" in result["error"]
+    assert not os.path.exists(config_path)
+
+
+@pytest.mark.asyncio
 async def test_trailing_pipe_argument_has_no_subprocess_side_effect(
     temp_test_dir, monkeypatch
 ):

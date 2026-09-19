@@ -235,6 +235,19 @@ def test_git_external_program_vectors_are_rejected(validator, monkeypatch, comma
         ["git", "config", "alias.pwn", "!sh -c id"],
         ["git", "config", "core.fsmonitor", "sh -c id"],
         ["git", "config", "--global", "alias.pwn", "!sh -c id"],
+        ["git", "--attr-source", "HEAD", "config", "alias.pwn", "!sh -c id"],
+        ["git", "--attr-source=HEAD", "config", "alias.pwn", "!sh -c id"],
+        [
+            "git",
+            "-C",
+            "repo",
+            "--attr-source",
+            "HEAD",
+            "config",
+            "alias.pwn",
+            "!sh -c id",
+        ],
+        ["git", "--shallow-file", "x", "config", "alias.pwn", "!sh -c id"],
     ],
 )
 def test_git_persistent_config_is_rejected(validator, monkeypatch, command):

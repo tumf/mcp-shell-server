@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.12] - 2026-09-19
+
+### Security
+- Reject persistent `git config` invocations prefixed by the value-taking `--attr-source` or `--shallow-file` global options. This closes argument-parser mismatches that could bypass the existing `git config` policy and persist an executable Git alias. Tracked as [GHSA-7v25-vcp6-4hcr](https://github.com/tumf/mcp-shell-server/security/advisories/GHSA-7v25-vcp6-4hcr). Versions `<=1.1.11` are affected; upgrade to `1.1.12` or later.
+
 ## [1.1.11] - 2026-09-18
 
 ### Security
