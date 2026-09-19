@@ -5,7 +5,9 @@
 
 [![MseeP.ai Security Assessment Badge](https://mseep.net/pr/tumf-mcp-shell-server-badge.png)](https://mseep.ai/app/tumf-mcp-shell-server)
 
-A secure shell command execution server implementing the Model Context Protocol (MCP). This server allows remote execution of whitelisted shell commands with support for stdin input.
+A trusted execution server implementing the Model Context Protocol (MCP). It runs allowlisted commands as argv arrays, with stdin input, contained redirection, a minimal child environment, execution limits, and structured audit logging.
+
+**This package is not a sandbox.** Allowing a command delegates that program the server process's existing OS authority. Read [Trusted execution contract](#trusted-execution-contract) before configuring it.
 
 <a href="https://glama.ai/mcp/servers/rt2d4pbn22"><img width="380" height="200" src="https://glama.ai/mcp/servers/rt2d4pbn22/badge" alt="mcp-shell-server MCP server" /></a>
 
@@ -19,6 +21,48 @@ A secure shell command execution server implementing the Model Context Protocol 
 * **Contained Redirection**: `<`, `>`, and `>>` targets must stay inside the requested working directory
 * **Minimal Child Environment**: Child processes receive a small allowlisted environment instead of inheriting all server secrets
 * **Structured Audit Logging**: Success, rejection, timeout, output-cap, and process-error outcomes are logged with redaction
+
+## Trusted execution contract
+
+Read this before the configuration examples below. The server emits the same warning once at startup through its logger (stderr); MCP stdout framing is unchanged.
+
+### What the server controls
+
+`mcp-shell-server` enforces a boundary around its *own* behavior:
+
+* which executable names it launches directly (`ALLOW_COMMANDS`, `ALLOW_PATTERNS`),
+* argv-based process creation without shell-string interpretation,
+* server-managed `<`, `>`, and `>>` redirection contained under the requested working directory,
+* the child environment it builds,
+* timeout and output-byte limits,
+* structured audit records.
+
+### What the server does not control
+
+Allowing a command is authority delegation: the allowed program runs with the server process's existing OS identity, filesystem access, network access, and credentials. `ALLOW_COMMANDS` and `ALLOW_PATTERNS` restrict only the command names the server launches directly. They do **not** guarantee containment of:
+
+* child processes an allowed program spawns,
+* program-specific interpreters, expression languages, or plugins,
+* configuration files, dotfiles, or environment-driven behavior the program reads on its own,
+* filesystem reads and writes the program performs itself, outside server-managed redirection,
+* network access the program performs itself.
+
+The command-specific rejection rules described under [Security](#security) are best-effort defense in depth against known dangerous argument forms. They are non-exhaustive, and they are not a proof that an allowed program is safe.
+
+### Untrusted input requires external isolation
+
+A trusted, authenticated MCP client does not make the *content* it processes trusted. Model-provided text, fetched web pages, issue text, and repository contents are untrusted input even when the client itself is trusted, and an LLM can be induced to construct a request from that content.
+
+If any request or any file the server can reach may derive from untrusted input, run the server inside an independently enforced OS boundary (container, VM, jail, or OS policy) that provides:
+
+* **Least-privilege identity** — a dedicated non-root user with no administrative rights on the host.
+* **Filesystem scope** — only the directories the workload needs, mounted read-only where possible, with host configuration, SSH keys, and cloud credential files out of reach.
+* **Network restrictions** — egress denied by default, allowing only the destinations the workload requires.
+* **Credential exclusion** — no ambient tokens, cloud instance-metadata access, or agent sockets reachable from the server process.
+* **Descendant-process containment** — a process/cgroup namespace so processes spawned by an allowed program are bounded and reaped with the sandbox.
+* **Resource limits** — CPU, memory, disk, process-count, and wall-clock caps enforced outside this package.
+
+Keep the allowlist as narrow as the workload allows; a narrow allowlist reduces exposure but never substitutes for the boundary above.
 
 ## MCP client setting in your Claude.app
 
@@ -117,7 +161,7 @@ Allowlisting a command name is not a sandbox for that program's own argument-lev
 
 Write sorted output with the server's contained redirection instead of `sort -o`: `["sort", "input", ">", "output"]` keeps the target inside the requested working directory, while `sort -o` would write directly to any process-accessible path. Option-like filenames stay usable after the `--` delimiter, for example `["sort", "--", "--output=data"]`.
 
-This hardening is best-effort defense in depth, not a complete sandbox for arbitrary untrusted command execution. For untrusted clients or broad command allowlists, run the server inside an OS/container sandbox with least-privilege filesystem and network access.
+This hardening is best-effort defense in depth against known dangerous argument forms. It is non-exhaustive and is not a complete sandbox for arbitrary untrusted command execution. See [Trusted execution contract](#trusted-execution-contract) for the external isolation required when requests or file contents may derive from untrusted input.
 
 ### Child process environment
 
@@ -216,10 +260,10 @@ Error response:
 
 ## Security
 
-The server implements several security measures, but it is not an OS sandbox. A command-name allowlist reduces accidental exposure, but allowed binaries may still read accessible files, consume CPU, or perform behavior allowed by the operating system. For hostile workloads, run the server inside an external sandbox such as a container, VM, or OS policy boundary.
+The measures below are the server's own enforceable boundary; they are not an OS sandbox. A command-name allowlist controls which executables the server launches directly, but an allowed program still runs with the server process's OS authority and may read accessible files, consume CPU, spawn child processes, or reach the network. See [Trusted execution contract](#trusted-execution-contract) for what this does and does not contain, and for the external isolation required with untrusted input.
 
-1. **Command Whitelisting**: Only explicitly allowed command names or full-matching `ALLOW_PATTERNS` entries can be executed.
-2. **Default Argument Hardening**: Known exec-capable vectors such as shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, `tar --checkpoint-action=exec`, GNU `sort --compress-program`/`-o`/`--files0-from`/`-T`, Git external-program options, and every global `git -c <name=value>` or `git -c<name=value>` configuration override are rejected by default even when the command name is allowlisted.
+1. **Command Whitelisting**: Only explicitly allowed command names or full-matching `ALLOW_PATTERNS` entries can be executed. This admits executable names; it does not confine an allowed program's own behavior.
+2. **Default Argument Hardening** (non-exhaustive defense in depth): Known exec-capable vectors such as shells/interpreters, `env`, `xargs`, `find -exec`, `awk system()`, `tar --checkpoint-action=exec`, GNU `sort --compress-program`/`-o`/`--files0-from`/`-T`, Git external-program options, and every global `git -c <name=value>` or `git -c<name=value>` configuration override are rejected by default even when the command name is allowlisted.
 3. **No Shell-String Execution**: Normal commands and pipelines are executed with `asyncio.create_subprocess_exec(*argv)`; user-controlled strings are not passed to a shell.
 4. **Contained Redirection**: Redirection paths must be relative to `directory`; absolute paths, `..` traversal, and symlink escapes are rejected before files are opened.
 5. **Environment Isolation**: Children receive a minimal environment plus names listed in `MCP_SHELL_CHILD_ENV_ALLOWLIST`. Parent secrets such as tokens are not inherited by default. Per-call `envs` values are only accepted for explicitly allowlisted names.
