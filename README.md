@@ -258,6 +258,8 @@ Error response:
 }
 ```
 
+Failed commands: when a command exits with a non-zero status, the MCP tool result has `isError: true` and its text starts with `Command failed with exit status N` (or `Command terminated by signal N` when the process was killed by a signal), followed by the command's stdout and stderr when present. Successful commands (exit status 0) return their stdout/stderr unchanged.
+
 ## Security
 
 The measures below are the server's own enforceable boundary; they are not an OS sandbox. A command-name allowlist controls which executables the server launches directly, but an allowed program still runs with the server process's OS authority and may read accessible files, consume CPU, spawn child processes, or reach the network. See [Trusted execution contract](#trusted-execution-contract) for what this does and does not contain, and for the external isolation required with untrusted input.

@@ -66,6 +66,24 @@ def _positive_int_from_env(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
+class CommandFailedError(Exception):
+    """Raised when a command exits with a non-zero status."""
+
+    def __init__(
+        self, returncode: int, stdout: str | None = None, stderr: str | None = None
+    ) -> None:
+        if returncode < 0:
+            message = f"Command terminated by signal {-returncode}"
+        else:
+            message = f"Command failed with exit status {returncode}"
+        if stdout:
+            message += f"\nstdout:\n{stdout}"
+        if stderr:
+            message += f"\nstderr:\n{stderr}"
+        super().__init__(message)
+        self.returncode = returncode
+
+
 class ExecuteToolHandler:
     """Handler for shell command execution."""
 
@@ -211,12 +229,22 @@ class ExecuteToolHandler:
             if result.get("error"):
                 raise ValueError(result["error"])
 
-            if result.get("stdout"):
-                content.append(TextContent(type="text", text=result["stdout"]))
+            stdout = result.get("stdout")
+            if stdout:
+                content.append(TextContent(type="text", text=stdout))
 
             stderr = result.get("stderr")
-            if stderr and "cannot set terminal process group" not in stderr:
+            if stderr and "cannot set terminal process group" in stderr:
+                stderr = None
+            if stderr:
                 content.append(TextContent(type="text", text=stderr))
+
+            returncode = result.get("returncode")
+            if returncode:
+                # Raising makes the MCP SDK reply with isError=true, so a
+                # client can tell a failed command from a successful one even
+                # when the command printed nothing.
+                raise CommandFailedError(returncode, stdout, stderr)
 
         except asyncio.TimeoutError as e:
             raise ValueError(

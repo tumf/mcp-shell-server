@@ -320,17 +320,14 @@ async def test_call_tool_with_stderr(monkeypatch):
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", mock_create_subprocess_exec)
     monkeypatch.setenv("ALLOW_COMMANDS", "ls")
-    result = await call_tool(
-        "shell_execute",
-        {"command": ["ls", "/nonexistent/directory"]},
-    )
-    assert len(result) >= 1
-    stderr_content = next(
-        (c for c in result if isinstance(c, TextContent) and "No such file" in c.text),
-        None,
-    )
-    assert stderr_content is not None
-    assert stderr_content.type == "text"
+    with pytest.raises(RuntimeError) as excinfo:
+        await call_tool(
+            "shell_execute",
+            {"command": ["ls", "/nonexistent/directory"]},
+        )
+    message = str(excinfo.value)
+    assert "exit status 2" in message
+    assert "No such file" in message
 
 
 @pytest.mark.asyncio
@@ -496,3 +493,97 @@ async def test_signal_handling(monkeypatch, mocker):
     # Verify cleanup was called
     mock_cleanup_processes.assert_called_once()
     context_manager.__aexit__.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_call_tool_nonzero_exit_without_stderr_is_error(monkeypatch):
+    """A failing command that prints nothing must not look like success."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "false")
+    with pytest.raises(RuntimeError, match="exit status 1"):
+        await call_tool("shell_execute", {"command": ["false"]})
+
+
+@pytest.mark.asyncio
+async def test_call_tool_nonzero_exit_with_stderr_reports_status_and_stderr(
+    monkeypatch, temp_test_dir
+):
+    """A failing command reports its exit status together with its stderr."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
+    with pytest.raises(RuntimeError) as excinfo:
+        await call_tool(
+            "shell_execute",
+            {"command": ["ls", "no_such_entry_here"], "directory": temp_test_dir},
+        )
+    message = str(excinfo.value)
+    assert "exit status" in message
+    assert "no_such_entry_here" in message
+
+
+@pytest.mark.asyncio
+async def test_call_tool_nonzero_exit_keeps_stdout(monkeypatch, temp_test_dir):
+    """Output produced before a failure is still delivered to the client."""
+    with open(os.path.join(temp_test_dir, "present_file.txt"), "w"):
+        pass
+    monkeypatch.setenv("ALLOW_COMMANDS", "ls")
+    with pytest.raises(RuntimeError) as excinfo:
+        await call_tool(
+            "shell_execute",
+            {"command": ["ls", ".", "no_such_entry_here"], "directory": temp_test_dir},
+        )
+    message = str(excinfo.value)
+    assert "exit status" in message
+    assert "present_file.txt" in message
+
+
+@pytest.mark.asyncio
+async def test_call_tool_signal_termination_is_error(monkeypatch):
+    """A negative return code (killed by a signal) is reported as a failure."""
+
+    async def mock_create_subprocess_exec(
+        *argv, stdin=None, stdout=None, stderr=None, env=None, cwd=None
+    ):
+        return MockProcess(stdout=b"", stderr=b"", returncode=-9)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", mock_create_subprocess_exec)
+    monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
+    with pytest.raises(RuntimeError, match="signal 9"):
+        await call_tool("shell_execute", {"command": ["sleep", "5"]})
+
+
+@pytest.mark.asyncio
+async def test_call_tool_success_output_unchanged(monkeypatch, temp_test_dir):
+    """A successful command keeps returning plain stdout content, no error."""
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+    result = await call_tool(
+        "shell_execute",
+        {"command": ["echo", "ok"], "directory": temp_test_dir},
+    )
+    assert [c.text for c in result] == ["ok"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_client_sees_is_error_for_nonzero_exit(monkeypatch):
+    """Through the SDK request handler, a failing command yields isError=True."""
+    from mcp.types import CallToolRequest, CallToolRequestParams
+
+    from mcp_shell_server.server import app
+
+    monkeypatch.setenv("ALLOW_COMMANDS", "false,echo")
+    handler = app.request_handlers[CallToolRequest]
+
+    async def call(command):
+        request = CallToolRequest(
+            method="tools/call",
+            params=CallToolRequestParams(
+                name="shell_execute", arguments={"command": command}
+            ),
+        )
+        return (await handler(request)).root
+
+    failed = await call(["false"])
+    assert failed.isError is True
+    assert "exit status 1" in failed.content[0].text
+
+    succeeded = await call(["echo", "ok"])
+    assert succeeded.isError is False
+    assert succeeded.content[0].text == "ok"
