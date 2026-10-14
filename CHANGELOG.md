@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.13] - 2026-10-14
+
 ### Added
 - Emit one operator warning during server startup stating that allowed commands run with the server process's OS authority and that untrusted input requires external OS isolation. The warning goes through the existing logger (stderr); MCP stdout framing, tool names, request/response schemas, and environment variables are unchanged.
 
 ### Fixed
+- Keep failed single-command stdout/stderr out of server logs while retaining them in MCP error responses.
 - A command that exits with a non-zero status is now reported to the MCP client as an error (`isError: true`) whose message contains `exit status N` (or `terminated by signal N`) followed by any stdout and stderr. Previously a failing command that printed nothing to stderr (for example `false`, or `curl -s` failing DNS resolution) was returned as an empty successful result, and one that did print to stderr was returned as a successful result, so clients could not distinguish failure from success. Output of successful commands is unchanged. Note that commands which use a non-zero status for a non-error answer (for example `grep` with no match, exit 1) are now also reported as errors.
 
 ### Changed

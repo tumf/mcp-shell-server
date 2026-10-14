@@ -40,10 +40,10 @@ EXTERNAL_ISOLATION_BOUNDARIES = (
 )
 
 
-def _unreleased_section(changelog: str) -> str:
-    """Return the text between the Unreleased heading and the next release."""
-    _, _, after = changelog.partition("## [Unreleased]")
-    assert after, "CHANGELOG.md has no Unreleased section"
+def _contract_release_section(changelog: str) -> str:
+    """The trusted-execution contract was released in 1.1.13."""
+    _, _, after = changelog.partition("## [1.1.13]")
+    assert after, "CHANGELOG.md has no 1.1.13 section"
     body, _, _ = after.partition("\n## [")
     return body
 
@@ -164,12 +164,12 @@ class TestSecurityPolicyContract:
 
 
 class TestChangelogContract:
-    def test_unreleased_records_the_startup_warning_and_contract(self) -> None:
-        unreleased = _unreleased_section(CHANGELOG)
-        assert "startup" in unreleased
-        assert "warning" in unreleased
-        assert "trusted-execution" in unreleased
-        assert "SECURITY.md" in unreleased
+    def test_release_records_the_startup_warning_and_contract(self) -> None:
+        release = _contract_release_section(CHANGELOG)
+        assert "startup" in release
+        assert "warning" in release
+        assert "trusted-execution" in release
+        assert "SECURITY.md" in release
 
 
 class TestStartupWarning:
