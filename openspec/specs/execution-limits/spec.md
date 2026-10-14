@@ -1,3 +1,11 @@
+# execution-limits
+
+## Purpose
+
+The server MUST enforce effective timeout and output byte limits for every command invocation, including when clients omit optional timeout input.
+
+## Requirements
+
 ### Requirement: Command execution MUST have timeout and output bounds
 
 The server MUST enforce effective timeout and output byte limits for every command invocation, including when clients omit optional timeout input.

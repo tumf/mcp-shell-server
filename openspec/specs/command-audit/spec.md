@@ -1,3 +1,11 @@
+# command-audit
+
+## Purpose
+
+The server MUST emit structured audit records for command invocation outcomes without exposing raw command output or unredacted secrets.
+
+## Requirements
+
 ### Requirement: Command invocations MUST emit structured audit records
 
 The server MUST emit structured audit records for command invocation outcomes without exposing raw command output or unredacted secrets.

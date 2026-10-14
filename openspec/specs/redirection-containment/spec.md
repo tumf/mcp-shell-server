@@ -1,3 +1,11 @@
+# redirection-containment
+
+## Purpose
+
+The server MUST reject input and output redirection targets that resolve outside the validated working directory before opening, reading, truncating, or appending to files.
+
+## Requirements
+
 ### Requirement: Redirection paths MUST be contained under the working directory
 
 The server MUST reject input and output redirection targets that resolve outside the validated working directory before opening, reading, truncating, or appending to files.

@@ -1,3 +1,11 @@
+# command-policy
+
+## Purpose
+
+Allowed regex patterns MUST match the full command name and MUST NOT admit command strings through prefix overmatch.
+
+## Requirements
+
 ### Requirement: ALLOW_PATTERNS MUST use full command-name matching
 
 Allowed regex patterns MUST match the full command name and MUST NOT admit command strings through prefix overmatch.

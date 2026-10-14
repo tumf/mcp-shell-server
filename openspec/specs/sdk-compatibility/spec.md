@@ -1,3 +1,11 @@
+# sdk-compatibility
+
+## Purpose
+
+The package SHALL constrain dependency resolution to MCP Python SDK versions compatible with the server API used by the implementation.
+
+## Requirements
+
 ### Requirement: Supported MCP SDK major version
 
 The package SHALL constrain dependency resolution to MCP Python SDK versions compatible with the server API used by the implementation.

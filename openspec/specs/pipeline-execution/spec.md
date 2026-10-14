@@ -1,3 +1,11 @@
+# pipeline-execution
+
+## Purpose
+
+The server MUST represent each pipeline segment as an argv array, MUST recognize pipeline syntax only from a discrete `|` argv element, MUST preserve pipe characters embedded in all other argv elements as literal argument data, and MUST NOT execute user-controlled pipeline segment strings through shell interpretation.
+
+## Requirements
+
 ### Requirement: Pipeline execution MUST preserve argv and avoid shell interpretation
 
 The server MUST represent each pipeline segment as an argv array, MUST recognize pipeline syntax only from a discrete `|` argv element, MUST preserve pipe characters embedded in all other argv elements as literal argument data, and MUST NOT execute user-controlled pipeline segment strings through shell interpretation.

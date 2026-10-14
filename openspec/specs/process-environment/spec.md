@@ -1,3 +1,11 @@
+# process-environment
+
+## Purpose
+
+The server MUST construct an explicit minimal child environment and MUST NOT forward the parent process environment wholesale.
+
+## Requirements
+
 ### Requirement: Child processes MUST NOT inherit server secrets by default
 
 The server MUST construct an explicit minimal child environment and MUST NOT forward the parent process environment wholesale.

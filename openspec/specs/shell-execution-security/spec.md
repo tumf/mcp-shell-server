@@ -1,3 +1,11 @@
+# shell-execution-security
+
+## Purpose
+
+The shell execution server MUST execute user-provided commands as argv arrays rather than shell-interpreted strings for normal single-command and pipeline execution.
+
+## Requirements
+
 ### Requirement: Shell execution MUST avoid shell interpretation for normal command paths
 
 The shell execution server MUST execute user-provided commands as argv arrays rather than shell-interpreted strings for normal single-command and pipeline execution.
