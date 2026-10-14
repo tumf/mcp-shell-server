@@ -276,6 +276,9 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
 
         return await tool_handler.run_tool(arguments)
 
+    except CommandFailedError as e:
+        # Expected failures carry client output, which must not enter server logs.
+        raise RuntimeError(f"Error executing command: {str(e)}") from None
     except Exception as e:
         logger.error(traceback.format_exc())
         raise RuntimeError(f"Error executing command: {str(e)}") from e

@@ -258,7 +258,7 @@ Error response:
 }
 ```
 
-Failed commands: when a command exits with a non-zero status, the MCP tool result has `isError: true` and its text starts with `Command failed with exit status N` (or `Command terminated by signal N` when the process was killed by a signal), followed by the command's stdout and stderr when present. Successful commands (exit status 0) return their stdout/stderr unchanged.
+Failed single commands: when a command exits with a non-zero status, the MCP tool result has `isError: true` and its text starts with `Error executing command: Command failed with exit status N` (or `Error executing command: Command terminated by signal N` when the process was killed by a signal), followed by the command's stdout and stderr when present. This output is returned to the client without logging its bodies. Successful commands (exit status 0) return their stdout/stderr unchanged. Pipeline failure handling is unchanged and does not preserve output in the same way.
 
 ## Security
 

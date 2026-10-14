@@ -562,6 +562,40 @@ async def test_call_tool_success_output_unchanged(monkeypatch, temp_test_dir):
 
 
 @pytest.mark.asyncio
+async def test_failed_output_reaches_client_without_entering_logs(
+    monkeypatch, tmp_path, caplog
+):
+    """Expected command failures return output without logging its bodies."""
+    from mcp.types import CallToolRequest, CallToolRequestParams
+
+    from mcp_shell_server.server import app
+
+    stdout = "PRIVATE_OUTPUT_SENTINEL"
+    stderr = "PRIVATE_MISSING_FILE_SENTINEL"
+    (tmp_path / "present.txt").write_text(stdout)
+    monkeypatch.setenv("ALLOW_COMMANDS", "cat")
+    request = CallToolRequest(
+        method="tools/call",
+        params=CallToolRequestParams(
+            name="shell_execute",
+            arguments={
+                "command": ["cat", "present.txt", stderr],
+                "directory": str(tmp_path),
+            },
+        ),
+    )
+    result = (await app.request_handlers[CallToolRequest](request)).root
+    message = result.content[0].text
+    assert result.isError is True
+    assert "exit status 1" in message
+    assert stdout in message
+    assert stderr in message
+    assert stdout not in caplog.text
+    assert stderr not in caplog.text
+    assert "Traceback" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_mcp_client_sees_is_error_for_nonzero_exit(monkeypatch):
     """Through the SDK request handler, a failing command yields isError=True."""
     from mcp.types import CallToolRequest, CallToolRequestParams
