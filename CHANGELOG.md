@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.14] - 2026-10-19
+
 ### Security
+
+Upgrade to 1.1.14 or later for the corrections below: [safe child PATH](https://github.com/tumf/mcp-shell-server/security/advisories/GHSA-x97g-5v53-g5cq), [known execution names and Git/find policy](https://github.com/tumf/mcp-shell-server/security/advisories/GHSA-g5pp-52qm-8mp8), and [tar option grammar](https://github.com/tumf/mcp-shell-server/security/advisories/GHSA-3g42-7xr6-4x77). These records cover versions 1.0.4 through 1.1.13 in aggregate; individual mechanisms and prerequisites differ as described in each advisory.
 - Child processes now receive `PATH` from `MCP_SHELL_SAFE_PATH` (or the documented POSIX default `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin` when it is unset or blank) instead of inheriting the server process `PATH`. On POSIX, bare command names are resolved with this PATH, so an earlier executable in the parent `PATH` is no longer selected for normal commands or any pipeline stage, and a command missing from the safe PATH fails instead of falling back. The parent or per-call `PATH` is used only when `PATH` is explicitly listed in `MCP_SHELL_CHILD_ENV_ALLOWLIST` (per-call wins over parent).
 
 - Reject the known execution wrappers and JS runtimes `setarch`, `strace`, `valgrind`, `deno`, and `bun` by default, even when allowlisted by name, absolute path, or `ALLOW_PATTERNS`, and in any pipeline stage. Reject the interactive `find` execution primaries `-ok` and `-okdir` (in addition to `-exec`/`-execdir`) for `find`, `gfind`, and `bfind`.

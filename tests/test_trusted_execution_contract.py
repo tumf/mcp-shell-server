@@ -328,14 +328,15 @@ class TestFiniteKnownExecutionPolicy:
                 assert rule in document, f"document dropped {rule!r}"
 
     def test_changelog_records_the_correction_and_compatibility(self) -> None:
-        unreleased = CHANGELOG.partition("## [Unreleased]")[2].partition("\n## [")[0]
+        release = CHANGELOG.partition("## [1.1.14]")[2].partition("\n## [")[0]
+        assert release, "CHANGELOG.md has no 1.1.14 section"
         for name in KNOWN_WRAPPER_RUNTIME_NAMES:
-            assert f"`{name}`" in unreleased
-        assert "`-ok`" in unreleased and "`-okdir`" in unreleased
-        assert "**Compatibility:**" in unreleased
-        assert "version or attach-only forms" in unreleased
-        assert FINITE_SCOPE_STATEMENT in unreleased
-        assert "were defects" in unreleased
+            assert f"`{name}`" in release
+        assert "`-ok`" in release and "`-okdir`" in release
+        assert "**Compatibility:**" in release
+        assert "version or attach-only forms" in release
+        assert FINITE_SCOPE_STATEMENT in release
+        assert "were defects" in release
 
     def test_canonical_change_spec_agrees_with_finite_scope(self) -> None:
         delta = (
