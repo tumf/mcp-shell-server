@@ -758,9 +758,14 @@ class CommandValidator:
                 )
             ):
                 raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
-            if value is None and option.arity.startswith("="):
-                # A required value is missing or invalid: Getopt::Long keeps
-                # the token unrecognized under pass_through.
+            if (
+                (value is None and option.arity.startswith("="))
+                or (separator and not option.arity)
+                or (separator and option.arity == "=s" and value == "")
+            ):
+                # pass_through preserves invalid options, including values on
+                # flags and empty required '=s' values. Removing an early-pass
+                # token could make a later selector become another option's data.
                 residual.append(arg)
         return residual
 

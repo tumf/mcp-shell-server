@@ -724,6 +724,35 @@ SEND_EMAIL_REJECTED = [
 ]
 
 
+@pytest.mark.parametrize(
+    "early_token",
+    [
+        "--no-identity=X",
+        "--no-identity=",
+        "--h=X",
+        "-H=",
+        "+dump-aliases=X",
+        "--translate-aliases=",
+        "--identity=",
+        "--IDENT=",
+    ],
+)
+@pytest.mark.parametrize(
+    "target", ["--sendmail-cmd=/fixture/helper", "--smtp-server=/fixture/helper"]
+)
+def test_git_send_email_invalid_early_token_preserves_later_selector(
+    validator, monkeypatch, early_token, target
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+    # Getopt::Long retains these malformed early options. The main pass
+    # consumes them as the subject, leaving the real selector reachable.
+    with pytest.raises(ValueError, match="git external program"):
+        validator.validate_command(
+            ["git", "send-email", "--subject", early_token, target]
+        )
+
+
 @pytest.mark.parametrize("args", SEND_EMAIL_REJECTED)
 def test_git_send_email_program_selectors_are_rejected(validator, monkeypatch, args):
     clear_env(monkeypatch)
@@ -778,6 +807,14 @@ def test_git_send_email_selectors_are_rejected_after_global_options(
         ["-Identity", "--sendmail-cmd=DATA"],
         ["+identity", "--smtp-server=/x"],
         ["--subject", "--identity", "--sendmail-cmd=DATA", "--sendmail-cmd=DATA2"],
+        # Invalid early-pass options remain subject data, not a blanket ban.
+        ["--subject", "--identity="],
+        ["--subject", "--no-identity=X"],
+        ["--subject", "--h=X"],
+        ["--subject", "+dump-aliases="],
+        ["--subject", "--identity=", "--smtp-server=smtp.example.invalid"],
+        # Valid early-pass removal still makes the selector-looking token data.
+        ["--subject", "--identity=work", "--sendmail-cmd=DATA"],
         # data after an unconsumed delimiter is not rescanned
         ["--", "--sendmail-cmd=DATA"],
         ["PATCH", "--", "--smtp-server=/x"],

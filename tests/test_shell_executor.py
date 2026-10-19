@@ -1834,6 +1834,8 @@ GIT_SEND_EMAIL_PRELAUNCH_CASES = [
     ["send-email", "--subject", "--", "--sendmail-cmd=/fixture/helper"],
     ["send-email", "--smtp-server", "C:\\fixture\\helper"],
     ["-C", "repo", "--no-pager", "send-email", "--sendmail-cmd=/fixture/helper"],
+    ["send-email", "--subject", "--identity=", "--sendmail-cmd=/fixture/helper"],
+    ["send-email", "--subject", "--h=X", "--smtp-server=/fixture/helper"],
 ]
 GIT_SEND_EMAIL_PIPELINE_CASES = [
     ["send-email", "--smtp-server=/fixture/helper", "PATCH"],
