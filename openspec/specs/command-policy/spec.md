@@ -30,7 +30,7 @@ Allowed regex patterns MUST match the full command name and MUST NOT admit comma
 
 ### Requirement: Command policy MUST reject exec-capable allowlist bypass vectors
 
-The server MUST validate command arguments and reject exec-capable allowlist bypass vectors before process creation, even when the command name itself is allowed. For an allowlisted `git`, the server MUST reject every command-scoped configuration override supplied through either `-c <name=value>` or `-c<name=value>` without attempting to classify the configuration key as safe. The server MUST also reject persistent `git config` invocations, known alternate binary names for hardened command families, and command-wrapper or shell-escape tools that would execute a non-allowlisted command through their arguments. For an allowlisted GNU `sort` or its `gsort` alias, the server MUST reject options that select an external compression program, direct output to a program-selected path, read an external file list, or select an external temporary directory. Rejection MUST cover full and uniquely abbreviated long options and separated, attached, or clustered short-option forms accepted by GNU option parsing. Option parsing MUST stop at a discrete `--` so later option-like filename operands remain data.
+The server MUST validate command arguments and reject the concrete known exec-capable forms specified below before process creation, even when the command name itself is allowed. This is a finite defense-in-depth policy for a trusted argv execution tool, not a universal wrapper detector or OS sandbox. For an allowlisted `git`, the server MUST reject every command-scoped configuration override supplied through either `-c <name=value>` or `-c<name=value>` without attempting to classify the configuration key as safe. The server MUST also reject persistent `git config` invocations, known alternate binary names for hardened command families, and the enumerated dangerous-name rules, including setarch, strace, valgrind, deno and bun. All invocations of those names are categorically rejected, including version or attach-only forms. The find family (find/gfind/bfind) MUST reject exact -exec, -execdir, -ok and -okdir primaries at validation. The shared preprocessing rejection of standalone semicolons MUST remain intact; it is independent of this validator rule. These finite rules do not promise that every allowed program is prevented from launching children; allowlisted make recipes and dd/tee program-owned file I/O remain delegated OS authority. Untrusted workloads require external least-privilege OS/container isolation. For an allowlisted GNU `sort` or its `gsort` alias, the server MUST reject options that select an external compression program, direct output to a program-selected path, read an external file list, or select an external temporary directory. Rejection MUST cover full and uniquely abbreviated long options and separated, attached, or clustered short-option forms accepted by GNU option parsing. Option parsing MUST stop at a discrete `--` so later option-like filename operands remain data.
 
 #### Scenario: Separated git configuration override is rejected
 
@@ -121,3 +121,21 @@ The server MUST validate command arguments and reject exec-capable allowlist byp
 **Given**: `ALLOW_COMMANDS` includes `sort`
 **When**: a client executes `['sort', '--', '--output=/tmp/name']`
 **Then**: the option-like token after `--` is treated as a filename operand and is allowed subject to other policy checks
+
+#### Scenario: Known omitted wrapper and runtime names are rejected
+
+**Given**: a command-name or pattern allowlist admits setarch, strace, valgrind, deno or bun
+**When**: it appears as a bare or absolute name in a single command or pipeline stage
+**Then**: validation rejects before process creation without consulting a dangerous-command override
+
+#### Scenario: Interactive find execution primary is rejected
+
+**Given**: find or an existing find alias is allowlisted
+**When**: validator receives -ok or -okdir
+**Then**: it rejects for the find execution policy, while executor preprocessing independently continues to reject standalone semicolon operators
+
+#### Scenario: Delegated program-owned behavior is not claimed as contained
+
+**Given**: trusted callers explicitly allow make, dd or tee
+**When**: they supply a recipe or program-owned path operand not violating another concrete rule
+**Then**: command validation permits it and documentation does not claim filesystem or child-process containment
