@@ -111,7 +111,7 @@ Allow subject to other existing rules:
 - --smtp-server=smtp.example.invalid, localhost, 127.0.0.1, [::1], relative-host.
 - --smtp-server-port 2525, --smtp-server-option --sendmail-cmd=DATA, --subject --sendmail-cmd=DATA, --subject=--smtp-server=DATA.
 - --identity --sendmail-cmd=DATA, including abbreviation/case. Early-pass removal must occur before main required-value consumption.
-- --subject --identity --sendmail-cmd=DATA --sendmail-cmd=DATA2: identity pass removes identity and DATA, leaving subject to consume DATA2; no real target remains.
+- --identity=work --subject --sendmail-cmd=DATA remains data in both modes. In contrast, --subject --identity --sendmail-cmd=DATA --sendmail-cmd=DATA2 and --subject --identity=work --sendmail-cmd=DATA MUST reject: require_order leaves a selector reachable.
 - -- --sendmail-cmd=DATA (validator-only data, not a claim Git succeeds).
 - Ordinary optional string/numeric values and boolean negations; confirm they do not swallow a later real target in paired negative tests.
 
