@@ -496,3 +496,110 @@ def test_ordinary_sort_arguments_remain_allowed(validator, monkeypatch, command)
     monkeypatch.setenv("ALLOW_COMMANDS", "sort,gsort,/usr/bin/sort")
 
     validator.validate_command(command)
+
+
+KNOWN_WRAPPER_RUNTIME_NAMES = ["setarch", "strace", "valgrind", "deno", "bun"]
+
+
+@pytest.mark.parametrize("name", KNOWN_WRAPPER_RUNTIME_NAMES)
+@pytest.mark.parametrize(
+    ("allow_env", "allow_value", "argv0"),
+    [
+        ("ALLOW_COMMANDS", "{name}", "{name}"),
+        ("ALLOW_COMMANDS", "/usr/bin/{name}", "/usr/bin/{name}"),
+        ("ALLOW_PATTERNS", "{name}", "{name}"),
+        ("ALLOW_PATTERNS", "(?:.*/)?{name}", "/opt/bin/{name}"),
+    ],
+)
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["touch", "/tmp/marker"],
+        ["--version"],
+        ["-p", "1"],
+    ],
+)
+def test_known_wrapper_and_runtime_names_are_rejected(
+    validator, monkeypatch, name, allow_env, allow_value, argv0, args
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv(allow_env, allow_value.format(name=name))
+    argv = [argv0.format(name=name), *args]
+
+    assert validator.is_command_allowed(argv[0])
+    with pytest.raises(
+        ValueError, match=f"^Command rejected by default security policy: {name}$"
+    ):
+        validator.validate_command(argv)
+
+
+@pytest.mark.parametrize("name", KNOWN_WRAPPER_RUNTIME_NAMES)
+def test_known_wrapper_and_runtime_names_are_rejected_in_later_pipeline_stage(
+    validator, monkeypatch, name
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", f"echo,{name}")
+
+    with pytest.raises(
+        ValueError, match=f"^Command rejected by default security policy: {name}$"
+    ):
+        validator.validate_pipeline(["echo", "x", "|", f"/usr/bin/{name}", "run"])
+
+
+def test_existing_dangerous_names_remain_rejected_when_allowlisted(
+    validator, monkeypatch
+):
+    from mcp_shell_server.command_validator import DANGEROUS_COMMANDS
+
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", ",".join(sorted(DANGEROUS_COMMANDS)))
+    monkeypatch.setenv("ALLOW_PATTERNS", ".*")
+
+    for name in sorted(DANGEROUS_COMMANDS):
+        with pytest.raises(ValueError, match="default security policy"):
+            validator.validate_command([name, "--version"])
+
+
+@pytest.mark.parametrize("finder", ["find", "gfind", "bfind", "/usr/bin/find"])
+@pytest.mark.parametrize("primary", ["-exec", "-execdir", "-ok", "-okdir"])
+def test_find_execution_primaries_are_rejected_by_validator(
+    validator, monkeypatch, finder, primary
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "find,gfind,bfind,/usr/bin/find")
+
+    # The trailing ";" is deliberately absent: this asserts the find policy
+    # itself, independent of the shared semicolon preprocessing rejection.
+    with pytest.raises(
+        ValueError, match="^Command rejected by default security policy: find -exec$"
+    ):
+        validator.validate_command([finder, ".", primary, "rm", "{}", "+"])
+
+
+@pytest.mark.parametrize("finder", ["find", "gfind", "bfind"])
+def test_ordinary_find_search_remains_allowed(validator, monkeypatch, finder):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "find,gfind,bfind")
+
+    validator.validate_command([finder, ".", "-name", "*.py", "-print"])
+    validator.validate_command([finder, ".", "-name", "-ok.txt", "-print"])
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["make", "build"],
+        ["make", "-C", "subdir", "test"],
+        ["dd", "if=input.bin", "of=output.bin", "bs=1"],
+        ["tee", "output.txt"],
+        ["tee", "-a", "log.txt"],
+    ],
+)
+def test_delegated_program_owned_behavior_is_not_blocked(
+    validator, monkeypatch, command
+):
+    """make recipes and dd/tee file I/O are delegated authority, not contained."""
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "make,dd,tee")
+
+    validator.validate_command(command)

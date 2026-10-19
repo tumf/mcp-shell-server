@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import os
@@ -1532,3 +1533,158 @@ async def test_executor_safe_neighbor_command_still_works(tmp_path, monkeypatch)
 
     assert result["status"] == 0, result
     assert result["stdout"].strip() == "ok"
+
+
+KNOWN_WRAPPER_RUNTIME_NAMES = ["setarch", "strace", "valgrind", "deno", "bun"]
+
+
+def _write_marker_probe(path, marker):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"#!/bin/sh\ntouch {marker}\necho probe-ran\n")
+    path.chmod(0o755)
+    return path
+
+
+@pytest.fixture
+def subprocess_spy(monkeypatch):
+    calls = []
+    original = asyncio.create_subprocess_exec
+
+    async def spy(*args, **kwargs):
+        calls.append(args)
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
+    return calls
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX executable probes")
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", KNOWN_WRAPPER_RUNTIME_NAMES)
+@pytest.mark.parametrize("allow_env", ["ALLOW_COMMANDS", "ALLOW_PATTERNS"])
+@pytest.mark.parametrize("pipeline", [False, True])
+async def test_executor_rejects_known_wrapper_names_before_process_creation(
+    tmp_path, monkeypatch, subprocess_spy, name, allow_env, pipeline
+):
+    clear_env(monkeypatch)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
+    marker = tmp_path / f"{name}-marker"
+    probe = _write_marker_probe(tmp_path / "bin" / name, marker)
+    if allow_env == "ALLOW_COMMANDS":
+        monkeypatch.setenv("ALLOW_COMMANDS", f"echo,{name},{probe}")
+    else:
+        monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+        monkeypatch.setenv("ALLOW_PATTERNS", f"(?:.*/)?{name}")
+
+    argv = [str(probe), "--version"]
+    if pipeline:
+        argv = ["echo", "x", "|", *argv]
+    result = await ShellExecutor().execute(argv, str(tmp_path))
+
+    assert result["status"] == 1
+    assert result["error"] == f"Command rejected by default security policy: {name}"
+    assert result.get("stdout", "") == ""
+    assert subprocess_spy == []
+    assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX executable probes")
+@pytest.mark.asyncio
+async def test_executor_marker_probe_runs_under_benign_name(
+    tmp_path, monkeypatch, subprocess_spy
+):
+    """Control: the probe harness does create its marker when not blocked."""
+    clear_env(monkeypatch)
+    marker = tmp_path / "control-marker"
+    probe = _write_marker_probe(tmp_path / "bin" / "probe", marker)
+    monkeypatch.setenv("ALLOW_COMMANDS", str(probe))
+
+    result = await ShellExecutor().execute([str(probe)], str(tmp_path))
+
+    assert result["status"] == 0, result
+    assert subprocess_spy
+    assert marker.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finder", ["find", "gfind", "bfind"])
+@pytest.mark.parametrize("primary", ["-exec", "-execdir", "-ok", "-okdir"])
+async def test_executor_find_execution_primary_hits_find_policy(
+    tmp_path, monkeypatch, subprocess_spy, finder, primary
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "find,gfind,bfind")
+    marker = tmp_path / "find-marker"
+
+    result = await ShellExecutor().execute(
+        [finder, ".", primary, "touch", str(marker), "+"], str(tmp_path)
+    )
+
+    assert result["status"] == 1
+    assert result["error"] == "Command rejected by default security policy: find -exec"
+    assert subprocess_spy == []
+    assert not marker.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("primary", ["-ok", "-okdir"])
+async def test_executor_semicolon_rejection_is_independent_of_find_policy(
+    tmp_path, monkeypatch, subprocess_spy, primary
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "find")
+
+    result = await ShellExecutor().execute(
+        ["find", ".", primary, "rm", "{}", ";"], str(tmp_path)
+    )
+
+    assert result["status"] == 1
+    # The shared preprocessing rejection fires first; it is not find policy.
+    assert result["error"] == "Unexpected shell operator: ;"
+    assert subprocess_spy == []
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX find")
+@pytest.mark.asyncio
+async def test_executor_ordinary_find_remains_allowed(tmp_path, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "find")
+    (tmp_path / "keep.py").write_text("")
+
+    result = await ShellExecutor().execute(
+        ["find", ".", "-name", "*.py", "-print"], str(tmp_path)
+    )
+
+    assert result["status"] == 0, result
+    assert "./keep.py" in result["stdout"]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX make/dd/tee")
+@pytest.mark.asyncio
+async def test_executor_delegates_make_dd_tee_program_owned_behavior(
+    tmp_path, monkeypatch
+):
+    """Allowlisted make/dd/tee keep their own child and file authority.
+
+    The validator does not contain these programs; these operations stay inside
+    the working directory only because the operands chosen here do.
+    """
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "make,dd,tee")
+    (tmp_path / "Makefile").write_text("built:\n\ttouch built\n")
+    (tmp_path / "input.bin").write_bytes(b"data")
+
+    made = await ShellExecutor().execute(["make", "built"], str(tmp_path))
+    copied = await ShellExecutor().execute(
+        ["dd", "if=input.bin", "of=output.bin"], str(tmp_path)
+    )
+    teed = await ShellExecutor().execute(
+        ["tee", "tee.txt"], str(tmp_path), stdin="hello\n"
+    )
+
+    assert made["status"] == 0, made
+    assert (tmp_path / "built").exists()
+    assert copied["status"] == 0, copied
+    assert (tmp_path / "output.bin").read_bytes() == b"data"
+    assert teed["status"] == 0, teed
+    assert (tmp_path / "tee.txt").read_text() == "hello\n"

@@ -280,3 +280,79 @@ class TestToolDescriptionContract:
             "timeout",
         }
         assert tool.inputSchema["required"] == ["command"]
+
+
+KNOWN_WRAPPER_RUNTIME_NAMES = ("setarch", "strace", "valgrind", "deno", "bun")
+FIND_EXECUTION_PRIMARIES = ("-exec", "-execdir", "-ok", "-okdir")
+FINITE_SCOPE_STATEMENT = "does not recognize every program capable of launching helpers"
+
+
+def _security_defense_section() -> str:
+    return SECURITY.partition("### Defense in depth")[2].partition("### Audit logging")[
+        0
+    ]
+
+
+class TestFiniteKnownExecutionPolicy:
+    @pytest.mark.parametrize(
+        "document", [README, _security_defense_section()], ids=["README", "SECURITY"]
+    )
+    def test_documents_name_the_known_wrapper_and_find_rules(self, document) -> None:
+        for name in KNOWN_WRAPPER_RUNTIME_NAMES:
+            assert f"`{name}`" in document, f"document omits {name!r}"
+        for primary in FIND_EXECUTION_PRIMARIES:
+            assert primary in document, f"document omits find {primary!r}"
+
+    @pytest.mark.parametrize(
+        "document", [README, _security_defense_section()], ids=["README", "SECURITY"]
+    )
+    def test_documents_state_finite_scope_and_delegation(self, document) -> None:
+        assert FINITE_SCOPE_STATEMENT in document
+        assert "finite list" in document
+        assert "`make` recipes" in document
+        assert "`dd`/`tee`" in document
+        assert "delegated" in document
+        assert "least-privilege OS/container isolation" in document
+        assert "including version or attach-only forms" in document
+
+    def test_documents_keep_concrete_rejection_rules(self) -> None:
+        for document in (README, _security_defense_section()):
+            for rule in (
+                "find -exec",
+                "awk system()",
+                "--checkpoint-action=exec",
+                "--compress-program",
+                "git -c",
+                "git config",
+            ):
+                assert rule in document, f"document dropped {rule!r}"
+
+    def test_changelog_records_the_correction_and_compatibility(self) -> None:
+        unreleased = CHANGELOG.partition("## [Unreleased]")[2].partition("\n## [")[0]
+        for name in KNOWN_WRAPPER_RUNTIME_NAMES:
+            assert f"`{name}`" in unreleased
+        assert "`-ok`" in unreleased and "`-okdir`" in unreleased
+        assert "**Compatibility:**" in unreleased
+        assert "version or attach-only forms" in unreleased
+        assert FINITE_SCOPE_STATEMENT in unreleased
+        assert "were defects" in unreleased
+
+    def test_canonical_change_spec_agrees_with_finite_scope(self) -> None:
+        delta = (
+            ROOT
+            / "openspec"
+            / "changes"
+            / "align-known-execution-policy"
+            / "specs"
+            / "command-policy"
+            / "spec.md"
+        )
+        canonical = ROOT / "openspec" / "specs" / "command-policy" / "spec.md"
+        # Before archive the delta carries the requirement; after archive the
+        # canonical spec does. Either way the finite wording must be present.
+        spec = delta.read_text() if delta.exists() else canonical.read_text()
+        assert "not a universal wrapper detector" in spec
+        for name in KNOWN_WRAPPER_RUNTIME_NAMES:
+            assert name in spec
+        assert "-ok and -okdir" in spec
+        assert "delegated OS authority" in spec
