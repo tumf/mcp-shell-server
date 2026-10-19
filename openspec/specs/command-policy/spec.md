@@ -140,6 +140,28 @@ The server MUST validate command arguments and reject the concrete known exec-ca
 **When**: they supply a recipe or program-owned path operand not violating another concrete rule
 **Then**: command validation permits it and documentation does not claim filesystem or child-process containment
 
+### Requirement: Explicit Git execution subcommands and options MUST be rejected
+
+The server MUST reject grep pager selection through -O, attached/clustered short forms and long open-files-in-pager prefixes; rebase execution through -x, attached/clustered forms and long exec prefixes; every filter-branch invocation; and exact bisect run dispatch. Rejection MUST occur before process creation, even under exact or pattern allowlisting and in any pipeline stage. Global prefix values and subcommand required values MUST NOT be rescanned as options. Unconsumed -- and --end-of-options terminate subcommand parsing. Grep stops parsing at ordinary operands except dashless expression parentheses; rebase continues after operands. Optional values consume attached/equal text only, not the following token. Exact long names take precedence; ambiguous target prefixes may be conservatively rejected without being described as valid executable Git syntax. Non-rebase subcommands MUST retain rejection of --exec and its non-empty prefixes as external-helper selectors; only exact rebase uses contextual exec parsing. Other existing broad Git configuration, upload/receive and external-protocol rules remain full-argv checks. These are finite defense-in-depth rules, not a guarantee of generic Git confinement.
+
+#### Scenario: Reported Git helper paths are blocked
+
+**Given**: Git is explicitly allowed
+**When**: grep pager selection, rebase exec, filter-branch or bisect run is requested
+**Then**: the specific Git policy rejects before process creation and no helper marker is created
+
+#### Scenario: Option-looking values retain their meaning
+
+**Given**: a benign required option consumes a token resembling -O or -x or --exec
+**When**: the invocation is validated
+**Then**: that value alone is not treated as a new execution option, while a later real execution option remains blocked
+
+#### Scenario: Ordinary Git operations remain supported
+
+**Given**: Git is allowed
+**When**: status, ordinary grep/rebase, bisect start/log/reset or data after end-of-options are supplied without a forbidden operation
+**Then**: the new policy permits them subject to existing independent controls
+
 ### Requirement: Tar external-program policy MUST account for GNU and BSD option grammar
 
 For the tar family including existing aliases, the server MUST reject checkpoint-action, use-compress-program, to-command, rsh-command, rmt-command, info-script and new-volume-script, including equal/separate values and abbreviations whose possible candidates include a forbidden option. All checkpoint actions are denied; numeric checkpoint intervals remain permitted. It MUST reject I/F short options in ordinary clusters and first-position old-style option words. Independent finite GNU and BSD interpretations MUST both be checked and either may reject. GNU H/L consume required values but BSD H/L do not; BSD W aliases a long option in hyphen form, GNU W does not. BSD --mo/--mod MUST NOT consume the next option. Benign required options MUST consume values without rescanning them within each dialect; optional values MUST NOT consume a following token. Exact known long names MUST take precedence over their prefix extensions. A discrete unconsumed -- MUST end parsing, whereas -- consumed as an option value MUST NOT. GNU parsing MUST continue after operands, whereas the BSD interpretation stops at the first ordinary operand, where a bare - is not an operand and MUST NOT terminate scanning. A forbidden option reached only in one dialect still MUST be rejected. These are finite defense-in-depth rules, not a complete sandbox or a guarantee about future program syntax.

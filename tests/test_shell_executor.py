@@ -1691,6 +1691,134 @@ async def test_executor_delegates_make_dd_tee_program_owned_behavior(
     assert (tmp_path / "tee.txt").read_text() == "hello\n"
 
 
+# One case per syntactic class of the Git execution-option policy (argv after
+# `git`): short, attached, cluster, long, prefix, after operand, global prefix
+# and a required value of `--`.
+GIT_EXECUTION_PRELAUNCH_CASES = [
+    ["grep", "-O", "-e", "MATCH"],
+    ["grep", "-OP", "-e", "MATCH"],
+    ["grep", "-nOP"],
+    ["grep", "-1OP"],
+    ["grep", "--open-files-in-pager=P"],
+    ["grep", "--op", "P"],
+    ["grep", "(", "-e", "MATCH", ")", "-OP"],
+    ["grep", "-e", "--", "-OP", "data"],
+    ["rebase", "-x", "P", "HEAD~1"],
+    ["rebase", "-xP", "HEAD~1"],
+    ["rebase", "-qxP"],
+    ["rebase", "--exec=P"],
+    ["rebase", "--ex", "P"],
+    ["rebase", "HEAD~1", "-xP"],
+    ["rebase", "--strategy", "--", "-xP"],
+    ["filter-branch", "--tree-filter", "P", "HEAD"],
+    ["filter-branch", "--help"],
+    ["bisect", "run", "P"],
+    ["bisect", "run", "--", "P"],
+    ["-C", "repo", "grep", "-OP"],
+    ["--git-dir=repo/.git", "--work-tree", "repo", "rebase", "-xP"],
+    ["--attr-source", "HEAD", "--namespace", "ns", "-C", "repo", "filter-branch"],
+    ["--shallow-file", "x", "bisect", "run", "P"],
+    ["push", "--exec=sh", "/tmp/repo"],
+    ["archive", "--remote=/tmp/repo", "--e", "sh", "HEAD"],
+]
+GIT_EXECUTION_PIPELINE_CASES = [
+    ["grep", "-OP", "-e", "MATCH"],
+    ["rebase", "-xP", "HEAD~1"],
+    ["filter-branch"],
+    ["bisect", "run", "P"],
+]
+
+
+def _assert_git_rejected_before_launch(result, mock_process_manager):
+    assert result["status"] == 1
+    assert "git external program" in result["error"]
+    mock_process_manager.create_process.assert_not_awaited()
+    mock_process_manager.execute_pipeline.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", GIT_EXECUTION_PRELAUNCH_CASES)
+async def test_executor_rejects_git_execution_options_before_process_creation(
+    shell_executor_with_mock, mock_process_manager, tmp_path, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    result = await shell_executor_with_mock.execute(["git", *command], str(tmp_path))
+
+    _assert_git_rejected_before_launch(result, mock_process_manager)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", GIT_EXECUTION_PIPELINE_CASES)
+@pytest.mark.parametrize("position", ["first", "last"])
+async def test_executor_rejects_git_execution_options_in_pipeline(
+    shell_executor_with_mock,
+    mock_process_manager,
+    tmp_path,
+    monkeypatch,
+    command,
+    position,
+):
+    clear_env(monkeypatch)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git,echo,cat")
+    git = ["git", *command]
+    argv = [*git, "|", "cat"] if position == "first" else ["echo", "x", "|", *git]
+
+    result = await shell_executor_with_mock.execute(argv, str(tmp_path))
+
+    _assert_git_rejected_before_launch(result, mock_process_manager)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX executable probes")
+@pytest.mark.asyncio
+@pytest.mark.parametrize("allow_env", ["ALLOW_COMMANDS", "ALLOW_PATTERNS"])
+async def test_executor_rejects_git_execution_option_under_absolute_allowlist(
+    shell_executor_with_mock, mock_process_manager, tmp_path, monkeypatch, allow_env
+):
+    clear_env(monkeypatch)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
+    marker = tmp_path / "git-marker"
+    probe = _write_marker_probe(tmp_path / "bin" / "git", marker)
+    if allow_env == "ALLOW_COMMANDS":
+        monkeypatch.setenv("ALLOW_COMMANDS", str(probe))
+    else:
+        monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+        monkeypatch.setenv("ALLOW_PATTERNS", "(?:.*/)?git")
+
+    result = await shell_executor_with_mock.execute(
+        [str(probe), "rebase", "-xP", "HEAD~1"], str(tmp_path)
+    )
+
+    _assert_git_rejected_before_launch(result, mock_process_manager)
+    assert not marker.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["status", "--short"],
+        ["grep", "-n", "-e", "MATCH", "--", "data"],
+        ["rebase", "--onto", "main", "topic"],
+        ["bisect", "log"],
+    ],
+)
+async def test_executor_allows_ordinary_git_operations(
+    shell_executor_with_mock, mock_process_manager, tmp_path, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    result = await shell_executor_with_mock.execute(["git", *command], str(tmp_path))
+
+    assert result["status"] == 0, result
+    mock_process_manager.create_process.assert_awaited()
+
+
 TAR_POLICY_ERROR = "tar command execution option"
 
 
