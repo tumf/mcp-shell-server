@@ -13,7 +13,6 @@ from weakref import WeakSet
 DEFAULT_SAFE_PATH = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 DEFAULT_TIMEOUT_SECONDS = 30
 DEFAULT_OUTPUT_LIMIT_BYTES = 1024 * 1024
-ENV_ALLOWLIST_VAR = "MCP_SHELL_ENV_ALLOWLIST"
 SAFE_PATH_VAR = "MCP_SHELL_SAFE_PATH"
 OUTPUT_LIMIT_VAR = "MCP_SHELL_OUTPUT_LIMIT_BYTES"
 TIMEOUT_VAR = "MCP_SHELL_DEFAULT_TIMEOUT_SECONDS"
@@ -92,20 +91,35 @@ def _parse_env_key_list(value: Optional[str]) -> Set[str]:
     return parsed
 
 
+def _initial_child_path() -> str:
+    """Return the PATH a child receives before any explicit PATH delegation.
+
+    A nonblank ``MCP_SHELL_SAFE_PATH`` is used byte-for-byte. Otherwise POSIX
+    uses ``DEFAULT_SAFE_PATH`` and never the parent PATH, because POSIX
+    executable lookup in ``create_subprocess_exec`` follows the child env PATH.
+    Windows keeps the parent PATH (``os.defpath`` only when absent) for launch
+    compatibility; there the child PATH does not control native executable
+    search, so it is not a safe-lookup guarantee.
+    """
+    configured = os.environ.get(SAFE_PATH_VAR)
+    if configured is not None and configured.strip():
+        return configured
+    if os.name == "nt":
+        return os.environ.get("PATH", os.defpath)
+    return DEFAULT_SAFE_PATH
+
+
 def build_child_environment(envs: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """Build the minimal, allowlist-controlled environment for child processes.
 
     Child processes intentionally do not inherit ``os.environ`` wholesale. The
     default environment contains only documented runtime keys required for basic
-    command lookup. Additional keys are inherited from the parent or supplied via
-    ``envs`` only when named in ``MCP_SHELL_CHILD_ENV_ALLOWLIST``.
+    command lookup, with PATH taken from ``MCP_SHELL_SAFE_PATH`` or the default
+    safe PATH. Additional keys, including PATH itself, are inherited from the
+    parent or supplied via ``envs`` only when named exactly in
+    ``MCP_SHELL_CHILD_ENV_ALLOWLIST``; per-call values win over parent values.
     """
-    child_env: Dict[str, str] = {}
-
-    if "PATH" in os.environ:
-        child_env["PATH"] = os.environ["PATH"]
-    else:
-        child_env["PATH"] = os.defpath
+    child_env: Dict[str, str] = {"PATH": _initial_child_path()}
 
     if os.name == "nt":
         for key in WINDOWS_CHILD_ENV_KEYS:
@@ -212,26 +226,11 @@ class ProcessManager:
     def build_child_environment(
         self, envs: Optional[Dict[str, str]] = None
     ) -> Dict[str, str]:
-        """Build a minimal child environment without inheriting parent secrets."""
-        child_env: Dict[str, str] = {
-            "PATH": os.environ.get(SAFE_PATH_VAR, DEFAULT_SAFE_PATH),
-            "LANG": "C",
-            "LC_ALL": "C",
-        }
+        """Build a minimal child environment without inheriting parent secrets.
 
-        allowlist = {
-            name.strip()
-            for name in os.environ.get(ENV_ALLOWLIST_VAR, "").split(",")
-            if name.strip()
-        }
-        for name in allowlist:
-            if name in os.environ:
-                child_env[name] = os.environ[name]
-
-        if envs:
-            child_env.update({str(key): str(value) for key, value in envs.items()})
-
-        return child_env
+        Delegates to the module-level builder used by process creation.
+        """
+        return build_child_environment(envs)
 
     async def start_process_async(
         self, cmd: List[str], timeout: Optional[int] = None
