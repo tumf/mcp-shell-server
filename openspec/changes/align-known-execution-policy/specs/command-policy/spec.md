@@ -1,0 +1,113 @@
+## MODIFIED Requirements
+
+### Requirement: Command policy MUST reject exec-capable allowlist bypass vectors
+
+The server MUST validate command arguments and reject the concrete known exec-capable forms specified below before process creation, even when the command name itself is allowed. This is a finite defense-in-depth policy for a trusted argv execution tool, not a universal wrapper detector or OS sandbox. For an allowlisted `git`, the server MUST reject every command-scoped configuration override supplied through either `-c <name=value>` or `-c<name=value>` without attempting to classify the configuration key as safe. The server MUST also reject persistent `git config` invocations, known alternate binary names for hardened command families, and the enumerated dangerous-name rules, including setarch, strace, valgrind, deno and bun. All invocations of those names are categorically rejected, including version or attach-only forms. The find family (find/gfind/bfind) MUST reject exact -exec, -execdir, -ok and -okdir primaries at validation. The shared preprocessing rejection of standalone semicolons MUST remain intact; it is independent of this validator rule. These finite rules do not promise that every allowed program is prevented from launching children; allowlisted make recipes and dd/tee program-owned file I/O remain delegated OS authority. Untrusted workloads require external least-privilege OS/container isolation. For an allowlisted GNU `sort` or its `gsort` alias, the server MUST reject options that select an external compression program, direct output to a program-selected path, read an external file list, or select an external temporary directory. Rejection MUST cover full and uniquely abbreviated long options and separated, attached, or clustered short-option forms accepted by GNU option parsing. Option parsing MUST stop at a discrete `--` so later option-like filename operands remain data.
+
+#### Scenario: Separated git configuration override is rejected
+
+**Given**: `ALLOW_COMMANDS` includes `git`
+**When**: a client executes `['git', '-c', 'core.fsmonitor=touch marker', 'status']`
+**Then**: the server rejects the command before creating a subprocess and `marker` is not created
+
+#### Scenario: Attached git configuration override is rejected
+
+**Given**: `ALLOW_COMMANDS` includes `git`
+**When**: a client executes `['git', '-cdiff.external=touch marker', 'diff', '--ext-diff']`
+**Then**: the server rejects the command before creating a subprocess and `marker` is not created
+
+#### Scenario: Benign-looking git configuration override is rejected
+
+**Given**: `ALLOW_COMMANDS` includes `git`
+**When**: a client executes `['git', '-c', 'user.name=Example', 'status']`
+**Then**: the server rejects the command before creating a subprocess because command-scoped Git configuration is categorically disallowed
+
+#### Scenario: Ordinary git command remains allowed
+
+**Given**: `ALLOW_COMMANDS` includes `git`
+**When**: a client executes `['git', 'status']`
+**Then**: the command is allowed subject to other policy checks
+
+#### Scenario: Persistent git configuration write is rejected
+
+**Given**: `ALLOW_COMMANDS` includes `git`
+**When**: a client executes `['git', 'config', 'alias.pwn', '!sh -c id']`
+**Then**: the server rejects the command before creating a subprocess
+
+#### Scenario: Alternate binary name uses the same default policy
+
+**Given**: `ALLOW_COMMANDS` includes `gawk`
+**When**: a client executes `['gawk', 'BEGIN { system("id") }']`
+**Then**: the server rejects the command before creating a subprocess
+
+#### Scenario: Command wrapper is rejected
+
+**Given**: `ALLOW_COMMANDS` includes `timeout`
+**When**: a client executes `['timeout', '5', 'touch', '/tmp/marker']`
+**Then**: the server rejects the command before creating a subprocess
+
+#### Scenario: Git external execution surfaces remain rejected
+
+**Given**: `ALLOW_COMMANDS` includes `git`
+**When**: a client supplies an external-program option or an `ext::` transport
+**Then**: the server rejects the command before creating a subprocess
+
+#### Scenario: Sort external compression program is rejected
+
+**Given**: `ALLOW_COMMANDS` includes `sort`
+**When**: a client executes `['sort', '--compress-program=/tmp/program', 'input']`
+**Then**: the server rejects the command before creating a subprocess and the external program is not executed
+
+#### Scenario: Sort direct output is rejected
+
+**Given**: `ALLOW_COMMANDS` includes `sort` and the working directory is `/tmp/work`
+**When**: a client executes `['sort', '-o', '/tmp/outside', 'input']`
+**Then**: the server rejects the command before creating a subprocess and `/tmp/outside` is not created or modified
+
+#### Scenario: Sort external file-list and temporary-directory options are rejected
+
+**Given**: `ALLOW_COMMANDS` includes `sort`
+**When**: a client supplies `--files0-from`, `-T`, or `--temporary-directory` with an attacker-selected path
+**Then**: the server rejects the command before creating a subprocess
+
+#### Scenario: GNU alias and abbreviated options use the same policy
+
+**Given**: `ALLOW_COMMANDS` includes `gsort`
+**When**: a client supplies a shortest unique abbreviation or clustered form such as `--co=/tmp/program`, `--o=/tmp/outside`, `--fil=/tmp/list`, `--t=/tmp/elsewhere`, `-ro /tmp/outside`, or `-rT /tmp/elsewhere`
+**Then**: the server rejects the command before creating a subprocess
+
+#### Scenario: Dangerous option after operand remains rejected
+
+**Given**: `ALLOW_COMMANDS` includes `sort`
+**When**: a client executes `['sort', 'input', '-o', '/tmp/outside']`
+**Then**: GNU option permutation does not bypass validation and the server rejects the command before creating a subprocess
+
+#### Scenario: Ordinary sort remains allowed
+
+**Given**: `ALLOW_COMMANDS` includes `sort`
+**When**: a client executes ordinary sorting arguments, `['sort', '-S1T', 'input']`, or `['sort', '-tT', '-k2,2', 'input']`
+**Then**: the command is allowed subject to other policy checks
+
+#### Scenario: Option parsing ends at the operand delimiter
+
+**Given**: `ALLOW_COMMANDS` includes `sort`
+**When**: a client executes `['sort', '--', '--output=/tmp/name']`
+**Then**: the option-like token after `--` is treated as a filename operand and is allowed subject to other policy checks
+
+#### Scenario: Known omitted wrapper and runtime names are rejected
+
+**Given**: a command-name or pattern allowlist admits setarch, strace, valgrind, deno or bun
+**When**: it appears as a bare or absolute name in a single command or pipeline stage
+**Then**: validation rejects before process creation without consulting a dangerous-command override
+
+#### Scenario: Interactive find execution primary is rejected
+
+**Given**: find or an existing find alias is allowlisted
+**When**: validator receives -ok or -okdir
+**Then**: it rejects for the find execution policy, while executor preprocessing independently continues to reject standalone semicolon operators
+
+#### Scenario: Delegated program-owned behavior is not claimed as contained
+
+**Given**: trusted callers explicitly allow make, dd or tee
+**When**: they supply a recipe or program-owned path operand not violating another concrete rule
+**Then**: command validation permits it and documentation does not claim filesystem or child-process containment
