@@ -709,6 +709,16 @@ SEND_EMAIL_REJECTED = [
     ["--to", "--I=", "--cc-cmd=" + SEND_EMAIL_HELPER, "PATCH"],
     ["--smtp-server-option", "+identity=", "--to-cmd", SEND_EMAIL_HELPER],
     ["--subject", "--identity=", "--h=" + SEND_EMAIL_HELPER, "--dry-run", "PATCH"],
+    # a separate empty value is consumed with its early-pass option
+    [
+        "--subject",
+        "--identity",
+        "",
+        "--to",
+        "--sendmail-cmd=" + SEND_EMAIL_HELPER,
+        "PATCH",
+    ],
+    ["--subject", "-I", "", "--cc", "--to-cmd", SEND_EMAIL_HELPER, "PATCH"],
     # removing an early-pass flag reveals a real target
     ["--subject", "--no-identity", "VALUE", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
     ["--subject", "-h", "VALUE", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
@@ -800,6 +810,7 @@ def test_git_send_email_selectors_are_rejected_after_global_options(
         ["-Identity", "--sendmail-cmd=DATA"],
         ["+identity", "--smtp-server=/x"],
         ["--subject", "--identity", "--sendmail-cmd=DATA", "--sendmail-cmd=DATA2"],
+        ["--subject", "--identity", "", "--sendmail-cmd=DATA", "PATCH"],
         # data after an unconsumed delimiter is not rescanned
         ["--", "--sendmail-cmd=DATA"],
         ["PATCH", "--", "--smtp-server=/x"],
