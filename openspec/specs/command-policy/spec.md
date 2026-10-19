@@ -77,7 +77,7 @@ The server MUST validate command arguments and reject the concrete known exec-ca
 #### Scenario: Git external execution surfaces remain rejected
 
 **Given**: `ALLOW_COMMANDS` includes `git`
-**When**: a client supplies an external-program option or an `ext::` transport
+**When**: a client supplies one of the concrete external-program selectors enumerated by this specification, or an `ext::` transport
 **Then**: the server rejects the command before creating a subprocess
 
 #### Scenario: Sort external compression program is rejected
