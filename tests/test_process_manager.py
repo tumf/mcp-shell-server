@@ -8,7 +8,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mcp_shell_server.process_manager import OutputLimitExceeded, ProcessManager
+from mcp_shell_server import process_manager as process_manager_module
+from mcp_shell_server.process_manager import (
+    DEFAULT_SAFE_PATH,
+    OutputLimitExceeded,
+    ProcessManager,
+    build_child_environment,
+)
+
+
+class _OsNameProxy:
+    """Module-scoped ``os`` stand-in that only overrides ``os.name``."""
+
+    def __init__(self, name):
+        self.name = name
+
+    def __getattr__(self, attr):
+        return getattr(os, attr)
 
 
 def create_mock_process():
@@ -73,7 +89,9 @@ async def test_create_process_uses_minimal_child_environment(
     """Child processes do not inherit unrelated parent environment variables."""
     monkeypatch.setenv("SECRET_TOKEN", "parent-secret")
     monkeypatch.setenv("UNRELATED_PARENT_VAR", "parent-value")
+    monkeypatch.setenv("PATH", "/parent/shadow/bin:/usr/bin")
     monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+    monkeypatch.delenv("MCP_SHELL_SAFE_PATH", raising=False)
     mock_proc = create_mock_process()
 
     with patch(
@@ -86,7 +104,7 @@ async def test_create_process_uses_minimal_child_environment(
     mock_create.assert_called_once()
     assert mock_create.call_args.args == ("echo", "test")
     child_env = mock_create.call_args.kwargs["env"]
-    assert child_env["PATH"] == os.environ.get("PATH", os.defpath)
+    assert child_env["PATH"] == DEFAULT_SAFE_PATH
     assert "SECRET_TOKEN" not in child_env
     assert "UNRELATED_PARENT_VAR" not in child_env
 
@@ -319,19 +337,222 @@ async def test_output_limit_terminates_real_high_output_process(process_manager)
 def test_child_environment_does_not_inherit_secrets(process_manager, monkeypatch):
     """Parent secrets are not copied unless explicitly allowlisted."""
     monkeypatch.setenv("SECRET_TOKEN", "do-not-leak")
-    monkeypatch.delenv("MCP_SHELL_ENV_ALLOWLIST", raising=False)
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "SAFE_VAR")
+    monkeypatch.setenv("SAFE_VAR", "visible")
+    monkeypatch.delenv("MCP_SHELL_SAFE_PATH", raising=False)
 
-    env = process_manager.build_child_environment()
+    env = build_child_environment()
 
     assert "SECRET_TOKEN" not in env
-    assert env["PATH"]
+    assert env == {"PATH": DEFAULT_SAFE_PATH, "SAFE_VAR": "visible"}
+    assert process_manager.build_child_environment() == env
 
 
 def test_child_environment_allows_documented_allowlist(process_manager, monkeypatch):
-    """Configured allowlisted variables are copied into the child env."""
-    monkeypatch.setenv("MCP_SHELL_ENV_ALLOWLIST", "SAFE_VAR")
+    """Only MCP_SHELL_CHILD_ENV_ALLOWLIST controls copied variables."""
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "SAFE_VAR")
+    monkeypatch.setenv("MCP_SHELL_ENV_ALLOWLIST", "OLD_VAR,PATH")
     monkeypatch.setenv("SAFE_VAR", "visible")
+    monkeypatch.setenv("OLD_VAR", "obsolete")
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", "/configured/bin")
 
-    env = process_manager.build_child_environment()
+    env = build_child_environment()
 
     assert env["SAFE_VAR"] == "visible"
+    assert "OLD_VAR" not in env
+    assert env["PATH"] == "/configured/bin"
+    assert "LANG" not in env
+    assert "LC_ALL" not in env
+    assert process_manager.build_child_environment() == env
+
+
+def test_instance_builder_delegates_to_module_builder(process_manager, monkeypatch):
+    """The instance adapter filters envs exactly like the module builder."""
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "SAFE_VAR")
+    monkeypatch.delenv("MCP_SHELL_SAFE_PATH", raising=False)
+    envs = {"SAFE_VAR": "ok", "SECRET_TOKEN": "blocked", "PATH": "/evil"}
+
+    env = process_manager.build_child_environment(envs)
+
+    assert env == build_child_environment(envs)
+    assert env == {"PATH": DEFAULT_SAFE_PATH, "SAFE_VAR": "ok"}
+
+
+@pytest.mark.parametrize("safe_path", [None, "", "   ", "\t\n"])
+@pytest.mark.parametrize("parent_path", ["/parent/shadow/bin", None])
+def test_blank_safe_path_uses_default_not_parent(monkeypatch, safe_path, parent_path):
+    """Unset or blank SAFE_PATH falls back to the POSIX default, never parent PATH."""
+    monkeypatch.setattr(process_manager_module, "os", _OsNameProxy("posix"))
+    monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+    if safe_path is None:
+        monkeypatch.delenv("MCP_SHELL_SAFE_PATH", raising=False)
+    else:
+        monkeypatch.setenv("MCP_SHELL_SAFE_PATH", safe_path)
+    if parent_path is None:
+        monkeypatch.delenv("PATH", raising=False)
+    else:
+        monkeypatch.setenv("PATH", parent_path)
+
+    assert build_child_environment()["PATH"] == DEFAULT_SAFE_PATH
+
+
+def test_configured_safe_path_is_preserved_byte_for_byte(monkeypatch):
+    """A nonblank SAFE_PATH is not trimmed or normalized."""
+    configured = " /opt/my tools/bin:/usr/bin "
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", configured)
+    monkeypatch.setenv("PATH", "/parent/shadow/bin")
+    monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+
+    assert build_child_environment()["PATH"] == configured
+
+
+def test_nonallowlisted_per_call_path_and_policy_vars_are_ignored(monkeypatch):
+    """Per-call envs cannot change PATH or server policy without operator opt-in."""
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", "/configured/bin")
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "SAFE_VAR")
+    monkeypatch.setenv("PATH", "/parent/shadow/bin")
+
+    env = build_child_environment(
+        {
+            "PATH": "/per-call/shadow/bin",
+            "MCP_SHELL_SAFE_PATH": "/per-call/safe",
+            "MCP_SHELL_CHILD_ENV_ALLOWLIST": "PATH",
+            "MCP_SHELL_ENV_ALLOWLIST": "PATH",
+        }
+    )
+
+    assert env == {"PATH": "/configured/bin"}
+
+
+def test_delegated_path_prefers_per_call_then_parent(monkeypatch):
+    """Exact PATH allowlisting delegates to per-call, then parent PATH."""
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", "/configured/bin")
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "PATH")
+    monkeypatch.setenv("PATH", "/parent/bin")
+
+    assert build_child_environment()["PATH"] == "/parent/bin"
+    assert build_child_environment({"PATH": "/call/bin"})["PATH"] == "/call/bin"
+    assert build_child_environment({"PATH": ""})["PATH"] == ""
+
+    monkeypatch.setenv("PATH", "")
+    assert build_child_environment()["PATH"] == ""
+
+
+def test_delegated_path_missing_values_keep_safe_path(monkeypatch):
+    """An allowlisted PATH that is absent everywhere keeps SAFE_PATH/default."""
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "PATH")
+    monkeypatch.delenv("PATH", raising=False)
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", "/configured/bin")
+
+    assert build_child_environment({"OTHER": "x"})["PATH"] == "/configured/bin"
+
+    monkeypatch.delenv("MCP_SHELL_SAFE_PATH", raising=False)
+    monkeypatch.setattr(process_manager_module, "os", _OsNameProxy("posix"))
+    assert build_child_environment()["PATH"] == DEFAULT_SAFE_PATH
+
+
+def test_path_allowlist_requires_exact_key(monkeypatch):
+    """Only the exact PATH key delegates PATH."""
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", "/configured/bin")
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "path,PATH_EXTRA,MYPATH")
+    monkeypatch.setenv("PATH", "/parent/bin")
+
+    assert build_child_environment({"PATH": "/call/bin"})["PATH"] == "/configured/bin"
+
+
+def test_windows_path_keeps_launch_compatibility(monkeypatch):
+    """Windows uses SAFE_PATH when set, else parent PATH, else os.defpath."""
+    monkeypatch.setattr(process_manager_module, "os", _OsNameProxy("nt"))
+    monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+    monkeypatch.setenv("COMSPEC", "C:\\Windows\\system32\\cmd.exe")
+    monkeypatch.setenv("SYSTEMROOT", "C:\\Windows")
+    monkeypatch.setenv("PATH", "C:\\Parent")
+
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", "C:\\Safe")
+    env = build_child_environment()
+    assert env["PATH"] == "C:\\Safe"
+    assert env["COMSPEC"] == "C:\\Windows\\system32\\cmd.exe"
+    assert env["SYSTEMROOT"] == "C:\\Windows"
+
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", " ")
+    assert build_child_environment()["PATH"] == "C:\\Parent"
+
+    monkeypatch.delenv("PATH")
+    assert build_child_environment()["PATH"] == os.defpath
+
+
+def _write_probe(directory, name, marker):
+    directory.mkdir(parents=True, exist_ok=True)
+    executable = directory / name
+    executable.write_text(f"#!/bin/sh\n: > '{marker}'\necho {name}\n")
+    executable.chmod(0o755)
+    return executable
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX PATH lookup semantics")
+@pytest.mark.asyncio
+async def test_create_process_ignores_parent_path_shadow(
+    process_manager, monkeypatch, tmp_path
+):
+    """Real process creation resolves bare names via SAFE_PATH, not parent PATH."""
+    safe_dir = tmp_path / "safe bin"
+    shadow_dir = tmp_path / "shadow"
+    safe_marker = tmp_path / "safe-marker"
+    shadow_marker = tmp_path / "shadow-marker"
+    _write_probe(safe_dir, "pathprobe", safe_marker)
+    _write_probe(shadow_dir, "pathprobe", shadow_marker)
+    monkeypatch.setenv("PATH", f"{shadow_dir}:{os.environ.get('PATH', '')}")
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", str(safe_dir))
+    monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+
+    process = await process_manager.create_process(["pathprobe"], directory=None)
+    stdout, _ = await process_manager.execute_with_timeout(process, timeout=5)
+
+    assert process.returncode == 0
+    assert stdout == b"pathprobe\n"
+    assert safe_marker.exists()
+    assert not shadow_marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX PATH lookup semantics")
+@pytest.mark.asyncio
+async def test_create_process_does_not_fall_back_to_parent_path(
+    process_manager, monkeypatch, tmp_path
+):
+    """A command only present in parent PATH fails to launch."""
+    safe_dir = tmp_path / "safe"
+    safe_dir.mkdir()
+    shadow_marker = tmp_path / "shadow-marker"
+    _write_probe(tmp_path / "shadow", "parentonly", shadow_marker)
+    monkeypatch.setenv("PATH", f"{tmp_path / 'shadow'}:{os.environ.get('PATH', '')}")
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", str(safe_dir))
+    monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+
+    with pytest.raises(ValueError, match="Failed to create process"):
+        await process_manager.create_process(["parentonly"], directory=None)
+
+    assert not shadow_marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX PATH lookup semantics")
+@pytest.mark.asyncio
+async def test_create_process_uses_parent_path_only_when_delegated(
+    process_manager, monkeypatch, tmp_path
+):
+    """Explicit PATH delegation is the only way the parent PATH is searched."""
+    safe_dir = tmp_path / "safe"
+    shadow_dir = tmp_path / "shadow"
+    safe_marker = tmp_path / "safe-marker"
+    shadow_marker = tmp_path / "shadow-marker"
+    _write_probe(safe_dir, "pathprobe", safe_marker)
+    _write_probe(shadow_dir, "pathprobe", shadow_marker)
+    monkeypatch.setenv("PATH", f"{shadow_dir}:{os.environ.get('PATH', '')}")
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", str(safe_dir))
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "PATH")
+
+    process = await process_manager.create_process(["pathprobe"], directory=None)
+    await process_manager.execute_with_timeout(process, timeout=5)
+
+    assert process.returncode == 0
+    assert shadow_marker.exists()
+    assert not safe_marker.exists()

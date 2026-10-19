@@ -1396,3 +1396,139 @@ async def test_sort_compress_program_spill_is_forced_before_rejection(
     assert result["status"] == 1
     assert "sort external program or path option" in result["error"]
     assert not marker.exists()
+
+
+def _write_path_probe(directory, name, marker):
+    directory.mkdir(parents=True, exist_ok=True)
+    executable = directory / name
+    executable.write_text(
+        f"#!/bin/sh\n: > '{marker}'\nwhile read -r line; do echo \"$line\"; done\n"
+        f"echo {name}\n"
+    )
+    executable.chmod(0o755)
+
+
+@pytest.fixture
+def shadowed_path_probes(tmp_path, monkeypatch):
+    """Install probe commands in a safe dir and earlier shadows in parent PATH."""
+    clear_env(monkeypatch)
+    safe_dir = tmp_path / "safe bin"
+    shadow_dir = tmp_path / "shadow"
+    markers = {}
+    for name in ("probea", "probeb"):
+        markers[("safe", name)] = tmp_path / f"safe-{name}"
+        markers[("shadow", name)] = tmp_path / f"shadow-{name}"
+        _write_path_probe(safe_dir, name, markers[("safe", name)])
+        _write_path_probe(shadow_dir, name, markers[("shadow", name)])
+    _write_path_probe(shadow_dir, "parentonly", tmp_path / "shadow-parentonly")
+    markers[("shadow", "parentonly")] = tmp_path / "shadow-parentonly"
+    monkeypatch.setenv("ALLOW_COMMANDS", "probea,probeb,parentonly")
+    monkeypatch.setenv("PATH", f"{shadow_dir}:{os.environ.get('PATH', '')}")
+    monkeypatch.setenv("MCP_SHELL_SAFE_PATH", str(safe_dir))
+    monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+    return markers
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX PATH lookup semantics")
+@pytest.mark.asyncio
+async def test_executor_normal_command_ignores_parent_path_shadow(
+    shadowed_path_probes, tmp_path
+):
+    markers = shadowed_path_probes
+
+    result = await ShellExecutor().execute(["probea"], str(tmp_path))
+
+    assert result["status"] == 0, result
+    assert result["stdout"].strip() == "probea"
+    assert markers[("safe", "probea")].exists()
+    assert not markers[("shadow", "probea")].exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX PATH lookup semantics")
+@pytest.mark.asyncio
+async def test_executor_every_pipeline_stage_ignores_parent_path_shadow(
+    shadowed_path_probes, tmp_path
+):
+    markers = shadowed_path_probes
+
+    result = await ShellExecutor().execute(["probea", "|", "probeb"], str(tmp_path))
+
+    assert result["status"] == 0, result
+    assert result["stdout"].split() == ["probea", "probeb"]
+    for name in ("probea", "probeb"):
+        assert markers[("safe", name)].exists()
+        assert not markers[("shadow", name)].exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX PATH lookup semantics")
+@pytest.mark.asyncio
+async def test_executor_command_missing_from_safe_path_fails(
+    shadowed_path_probes, tmp_path
+):
+    markers = shadowed_path_probes
+
+    result = await ShellExecutor().execute(["parentonly"], str(tmp_path))
+    pipeline = await ShellExecutor().execute(
+        ["probea", "|", "parentonly"], str(tmp_path)
+    )
+
+    assert result["status"] != 0
+    assert "Failed to create process" in result["error"]
+    assert pipeline["status"] != 0
+    assert "Failed to create process" in pipeline["error"]
+    assert not markers[("shadow", "parentonly")].exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX PATH lookup semantics")
+@pytest.mark.asyncio
+async def test_executor_parent_path_runs_only_with_explicit_delegation(
+    shadowed_path_probes, tmp_path, monkeypatch
+):
+    markers = shadowed_path_probes
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "PATH")
+
+    result = await ShellExecutor().execute(["probea", "|", "probeb"], str(tmp_path))
+
+    assert result["status"] == 0, result
+    for name in ("probea", "probeb"):
+        assert markers[("shadow", name)].exists()
+        assert not markers[("safe", name)].exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX PATH lookup semantics")
+@pytest.mark.asyncio
+async def test_executor_per_call_path_requires_delegation(
+    shadowed_path_probes, tmp_path, monkeypatch
+):
+    markers = shadowed_path_probes
+    shadow_dir = str(tmp_path / "shadow")
+
+    blocked = await ShellExecutor().execute(
+        ["probea"], str(tmp_path), envs={"PATH": shadow_dir}
+    )
+    assert blocked["status"] == 0, blocked
+    assert markers[("safe", "probea")].exists()
+    assert not markers[("shadow", "probea")].exists()
+
+    monkeypatch.setenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", "PATH")
+    monkeypatch.setenv("PATH", "/nonexistent")
+    delegated = await ShellExecutor().execute(
+        ["probea"], str(tmp_path), envs={"PATH": shadow_dir}
+    )
+    assert delegated["status"] == 0, delegated
+    assert markers[("shadow", "probea")].exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX PATH lookup semantics")
+@pytest.mark.asyncio
+async def test_executor_safe_neighbor_command_still_works(tmp_path, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+    monkeypatch.setenv("SECRET_TOKEN", "do-not-leak")
+    monkeypatch.delenv("MCP_SHELL_SAFE_PATH", raising=False)
+    monkeypatch.delenv("MCP_SHELL_CHILD_ENV_ALLOWLIST", raising=False)
+
+    result = await ShellExecutor().execute(["echo", "ok"], str(tmp_path))
+
+    assert result["status"] == 0, result
+    assert result["stdout"].strip() == "ok"

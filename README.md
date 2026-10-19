@@ -169,6 +169,22 @@ Commands run with an isolated child environment. The server does **not** pass th
 
 By default the child environment contains only the minimal launch keys needed for command execution: `PATH` on POSIX systems, plus Windows process-launch keys when applicable (`COMSPEC`, `PATHEXT`, `SYSTEMROOT`, and `WINDIR`).
 
+The child `PATH` is not inherited from the server process. It is chosen with this precedence:
+
+1. When `PATH` is explicitly listed in `MCP_SHELL_CHILD_ENV_ALLOWLIST`, a per-call `envs` `PATH` value, otherwise the parent process `PATH`. Delegated values, including empty strings, are passed unchanged.
+2. Otherwise a nonblank `MCP_SHELL_SAFE_PATH`, used exactly as configured (no trimming).
+3. Otherwise, on POSIX, the default `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`. An unset, empty, or whitespace-only `MCP_SHELL_SAFE_PATH` uses this default.
+
+On POSIX, bare command names such as `git` are resolved using this child `PATH`, so an earlier executable in the server's own `PATH` is not selected and a command missing from the safe PATH fails instead of falling back to the parent `PATH`. Tools installed outside the system directories (for example Homebrew on Apple Silicon, `~/.local/bin`, or version-manager shims) therefore require either adding their directory to `MCP_SHELL_SAFE_PATH` or explicitly delegating with `MCP_SHELL_CHILD_ENV_ALLOWLIST="PATH"`:
+
+```bash
+MCP_SHELL_SAFE_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+ALLOW_COMMANDS="git,rg" \
+uvx mcp-shell-server
+```
+
+Delegating `PATH` is an operator opt-in: without it, a per-call `envs` `PATH` value is ignored. On Windows, a nonblank `MCP_SHELL_SAFE_PATH` is used as the child `PATH`; otherwise the parent `PATH` is preserved (falling back to `os.defpath` only when absent). Windows native executable search does not follow the child environment `PATH`, so this setting is not a safe-lookup guarantee on Windows.
+
 Use `MCP_SHELL_CHILD_ENV_ALLOWLIST` to explicitly allow additional environment variable names to be inherited from the parent process or accepted from per-command environment overrides. The allowlist is comma-separated and uses exact environment variable names:
 
 ```bash
@@ -282,7 +298,7 @@ The measures below are the server's own enforceable boundary; they are not an OS
 | `MCP_SHELL_MAX_TIMEOUT_SECONDS` | `300` | Maximum effective timeout accepted from clients |
 | `MCP_SHELL_OUTPUT_LIMIT_BYTES` | `1048576` | Maximum captured stdout/stderr bytes per process |
 | `MCP_SHELL_CHILD_ENV_ALLOWLIST` | empty | Comma-separated parent or per-call environment variables allowed in children |
-| `MCP_SHELL_SAFE_PATH` | `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin` | PATH supplied to children |
+| `MCP_SHELL_SAFE_PATH` | `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin` | PATH supplied to children and used for POSIX command lookup unless `PATH` is in `MCP_SHELL_CHILD_ENV_ALLOWLIST`; blank values use the default |
 
 ## Development
 

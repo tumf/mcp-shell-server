@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Child processes now receive `PATH` from `MCP_SHELL_SAFE_PATH` (or the documented POSIX default `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin` when it is unset or blank) instead of inheriting the server process `PATH`. On POSIX, bare command names are resolved with this PATH, so an earlier executable in the parent `PATH` is no longer selected for normal commands or any pipeline stage, and a command missing from the safe PATH fails instead of falling back. The parent or per-call `PATH` is used only when `PATH` is explicitly listed in `MCP_SHELL_CHILD_ENV_ALLOWLIST` (per-call wins over parent).
+
+### Changed
+- **Compatibility:** tools installed outside the default system directories (for example `/opt/homebrew/bin`, `~/.local/bin`, or version-manager shims) now require adding their directory to `MCP_SHELL_SAFE_PATH` or setting `MCP_SHELL_CHILD_ENV_ALLOWLIST="PATH"`. On Windows a nonblank `MCP_SHELL_SAFE_PATH` is used, otherwise the parent `PATH` is preserved; Windows native executable search is not isolated by this change.
+- `ProcessManager.build_child_environment()` now delegates to the module-level builder used for process creation, so it applies the same allowlist filtering and no longer adds `LANG`/`LC_ALL` or accepts unfiltered overrides. The unused `MCP_SHELL_ENV_ALLOWLIST` setting has been removed; use `MCP_SHELL_CHILD_ENV_ALLOWLIST`.
+
 ## [1.1.13] - 2026-10-14
 
 ### Added
