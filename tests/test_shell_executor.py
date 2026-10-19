@@ -1836,6 +1836,9 @@ GIT_SEND_EMAIL_PRELAUNCH_CASES = [
     ["-C", "repo", "--no-pager", "send-email", "--sendmail-cmd=/fixture/helper"],
     ["send-email", "--subject", "--identity=", "--sendmail-cmd=/fixture/helper"],
     ["send-email", "--subject", "--h=X", "--smtp-server=/fixture/helper"],
+    ["send-email", "--subject", "--no-identity", "--sendmail-cmd=/fixture/helper"],
+    ["send-email", "--subject", "--identity=work", "--sendmail-cmd=/fixture/helper"],
+    ["send-email", "--h=/fixture/helper"],
 ]
 GIT_SEND_EMAIL_PIPELINE_CASES = [
     ["send-email", "--smtp-server=/fixture/helper", "PATCH"],
@@ -1845,10 +1848,20 @@ GIT_SEND_EMAIL_PIPELINE_CASES = [
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("command", GIT_SEND_EMAIL_PRELAUNCH_CASES)
+@pytest.mark.parametrize("posix", [False, True])
 async def test_executor_rejects_git_send_email_selectors_before_process_creation(
-    shell_executor_with_mock, mock_process_manager, tmp_path, monkeypatch, command
+    shell_executor_with_mock,
+    mock_process_manager,
+    tmp_path,
+    monkeypatch,
+    command,
+    posix,
 ):
     clear_env(monkeypatch)
+    if posix:
+        monkeypatch.setenv("POSIXLY_CORRECT", "1")
+    else:
+        monkeypatch.delenv("POSIXLY_CORRECT", raising=False)
     monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
     monkeypatch.setenv("ALLOW_COMMANDS", "git")
 

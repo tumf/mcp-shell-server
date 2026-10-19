@@ -753,6 +753,32 @@ def test_git_send_email_invalid_early_token_preserves_later_selector(
         )
 
 
+@pytest.mark.parametrize("posix", [None, "1"])
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--subject", "--no-identity", "--sendmail-cmd=/fixture/helper"],
+        [
+            "--subject",
+            "--identity",
+            "--sendmail-cmd=DATA",
+            "--sendmail-cmd=/fixture/helper",
+        ],
+        ["--h=/fixture/helper"],
+        ["--subject", "--identity=work", "--sendmail-cmd=/fixture/helper"],
+    ],
+)
+def test_git_send_email_require_order_union(validator, monkeypatch, posix, args):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+    if posix is None:
+        monkeypatch.delenv("POSIXLY_CORRECT", raising=False)
+    else:
+        monkeypatch.setenv("POSIXLY_CORRECT", posix)
+    with pytest.raises(ValueError, match="git external program"):
+        validator.validate_command(["git", "send-email", *args])
+
+
 @pytest.mark.parametrize("args", SEND_EMAIL_REJECTED)
 def test_git_send_email_program_selectors_are_rejected(validator, monkeypatch, args):
     clear_env(monkeypatch)
@@ -806,15 +832,12 @@ def test_git_send_email_selectors_are_rejected_after_global_options(
         ["--IDENT", "--sendmail-cmd=DATA"],
         ["-Identity", "--sendmail-cmd=DATA"],
         ["+identity", "--smtp-server=/x"],
-        ["--subject", "--identity", "--sendmail-cmd=DATA", "--sendmail-cmd=DATA2"],
         # Invalid early-pass options remain subject data, not a blanket ban.
         ["--subject", "--identity="],
         ["--subject", "--no-identity=X"],
         ["--subject", "--h=X"],
         ["--subject", "+dump-aliases="],
         ["--subject", "--identity=", "--smtp-server=smtp.example.invalid"],
-        # Valid early-pass removal still makes the selector-looking token data.
-        ["--subject", "--identity=work", "--sendmail-cmd=DATA"],
         # data after an unconsumed delimiter is not rescanned
         ["--", "--sendmail-cmd=DATA"],
         ["PATCH", "--", "--smtp-server=/x"],

@@ -76,6 +76,10 @@ Authority: Git v2.53.0 git-send-email.perl (https://github.com/git/git/blob/v2.5
 ]
 ```
 
+## Parser environment union
+
+Evaluate all three passes twice: default permutation and POSIXLY_CORRECT require_order. The latter disables abbreviations and plus prefixes, and stops at the first unknown/non-option/invalid option. Reject if either reaches a protected selector. This is deliberately environment-independent; it can reject data consumed only in the default interpretation. Required-string and optional-string consumption otherwise retain their stated rules, with optional values recognizing only dash prefixes as option-like in require_order mode. Invalid equals-attached integers remain residual tokens in both modes. `--subject --identity=work --sendmail-cmd=DATA` and `--subject --identity --sendmail-cmd=DATA --sendmail-cmd=DATA2` are rejected, because require_order leaves a real selector reachable.
+
 ## Algorithm
 
 1. Existing _git_subcommand_index resolves exact send-email; never scan operand strings to guess the subcommand. Run this recognizer on the tokens after it. Preserve all existing independent Git rejection scans unchanged.

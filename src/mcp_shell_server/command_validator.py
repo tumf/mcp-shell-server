@@ -697,6 +697,7 @@ class CommandValidator:
         args: List[str],
         table: Dict[str, GitSendEmailOption],
         main_pass: bool,
+        require_order: bool = False,
     ) -> List[str]:
         """Run one Getopt::Long pass_through pass and return the residual argv.
 
@@ -715,15 +716,20 @@ class CommandValidator:
                 break
             body = arg[2:] if arg.startswith("--") else arg[1:]
             name, separator, attached = body.partition("=")
-            if not arg.startswith(("-", "+")) or not name:
+            if not arg.startswith(("-",) if require_order else ("-", "+")) or not name:
                 residual.append(arg)
+                if require_order:
+                    residual.extend(args[index:])
+                    break
                 continue
             name = name.translate(ASCII_LOWERCASE_TABLE)
             if name in table:
                 candidates = {table[name]}
             else:
                 candidates = {
-                    option for key, option in table.items() if key.startswith(name)
+                    option
+                    for key, option in table.items()
+                    if not require_order and key.startswith(name)
                 }
             if len(candidates) != 1:
                 if main_pass and any(
@@ -733,6 +739,9 @@ class CommandValidator:
                 ):
                     raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
                 residual.append(arg)
+                if require_order:
+                    residual.extend(args[index:])
+                    break
                 continue
             option = candidates.pop()
             following = args[index] if index < len(args) else None
@@ -741,7 +750,11 @@ class CommandValidator:
                 if option.arity == "=s" or (
                     option.arity == ":s"
                     and following != "--"
-                    and not GIT_SEND_EMAIL_OPTION_LIKE_PATTERN.fullmatch(following)
+                    and not (
+                        re.fullmatch(r"-+.+", following)
+                        if require_order
+                        else GIT_SEND_EMAIL_OPTION_LIKE_PATTERN.fullmatch(following)
+                    )
                 ):
                     value = following
                     index += 1
@@ -762,11 +775,19 @@ class CommandValidator:
                 (value is None and option.arity.startswith("="))
                 or (separator and not option.arity)
                 or (separator and option.arity == "=s" and value == "")
+                or (
+                    separator
+                    and option.arity in {"=i", ":i"}
+                    and not GIT_SEND_EMAIL_INTEGER_PATTERN.fullmatch(attached)
+                )
             ):
                 # pass_through preserves invalid options, including values on
                 # flags and empty required '=s' values. Removing an early-pass
                 # token could make a later selector become another option's data.
                 residual.append(arg)
+                if require_order:
+                    residual.extend(args[index:])
+                    break
         return residual
 
     def _validate_git_send_email_options(self, args: List[str]) -> None:
@@ -776,11 +797,16 @@ class CommandValidator:
         git-send-email.perl run in order, so values consumed by an earlier
         pass are never rescanned and removed flags never hide a selector.
         """
-        residual = args
-        for pass_index, table in enumerate(GIT_SEND_EMAIL_OPTION_TABLES):
-            residual = self._git_send_email_pass(
-                residual, table, pass_index == len(GIT_SEND_EMAIL_OPTION_TABLES) - 1
-            )
+        # Evaluate both Getopt defaults, independent of the server environment.
+        for require_order in (False, True):
+            residual = args
+            for pass_index, table in enumerate(GIT_SEND_EMAIL_OPTION_TABLES):
+                residual = self._git_send_email_pass(
+                    residual,
+                    table,
+                    pass_index == len(GIT_SEND_EMAIL_OPTION_TABLES) - 1,
+                    require_order,
+                )
 
     def _validate_git_execution_subcommand(
         self, args: List[str], subcommand_index: int | None
