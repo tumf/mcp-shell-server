@@ -11,6 +11,8 @@ A trusted execution server implementing the Model Context Protocol (MCP). It run
 
 <a href="https://glama.ai/mcp/servers/rt2d4pbn22"><img width="380" height="200" src="https://glama.ai/mcp/servers/rt2d4pbn22/badge" alt="mcp-shell-server MCP server" /></a>
 
+Development and releases follow [Branch and release flow](docs/GIT_FLOW.md).
+
 ## Features
 
 * **Argv-based Command Execution**: Allowed commands run via subprocess argv without shell-string interpretation
