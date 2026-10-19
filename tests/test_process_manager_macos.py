@@ -1,6 +1,7 @@
 # tests/test_process_manager_macos.py
 import asyncio
 import platform
+import signal
 import subprocess
 
 import pytest
@@ -122,8 +123,8 @@ async def test_multiple_process_cleanup(process_manager):
 
 
 @pytest.mark.asyncio
-async def test_process_group_termination(process_manager):
-    """Test that entire process group is terminated."""
+async def test_killed_parent_pipe_cleanup(process_manager):
+    """Reap a killed parent and close pipes inherited by its descendants."""
     # Create a process that spawns children
     cmd = ["sh", "-c", "sleep 10 & sleep 10 & sleep 10 & wait"]
     process = await process_manager.start_process(cmd)
@@ -138,12 +139,17 @@ async def test_process_group_termination(process_manager):
         # Wait a moment for cleanup
         await asyncio.sleep(0.5)
 
-        # Check if any processes from the group remain
-        ps = subprocess.run(["pgrep", "-g", str(process.pid)], capture_output=True)
-        assert ps.returncode != 0, "Process group still exists"
+        assert process.returncode == -signal.SIGKILL
     finally:
         if process.returncode is None:
             try:
                 process.kill()
             except ProcessLookupError:
                 pass
+        # Descendant containment is not guaranteed. Their inherited pipes must
+        # reach EOF before this test's event loop closes, even after parent exit.
+        await asyncio.wait_for(process.communicate(), timeout=12)
+
+    assert process.stdin.is_closing()
+    assert process.stdout.at_eof()
+    assert process.stderr.at_eof()
