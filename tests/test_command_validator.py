@@ -2,7 +2,12 @@
 
 import pytest
 
-from mcp_shell_server.command_validator import CommandValidator
+from mcp_shell_server.command_validator import (
+    BSD_TAR_DIALECT,
+    GNU_TAR_DIALECT,
+    TAR_PROHIBITED_LONG_OPTIONS,
+    CommandValidator,
+)
 
 
 def clear_env(monkeypatch):
@@ -826,3 +831,282 @@ def test_delegated_program_owned_behavior_is_not_blocked(
     monkeypatch.setenv("ALLOW_COMMANDS", "make,dd,tee")
 
     validator.validate_command(command)
+
+
+TAR_POLICY_ERROR_PATTERN = (
+    "^Command rejected by default security policy: tar command execution option$"
+)
+
+
+def _tar_long_option_spellings():
+    """Every abbreviation of every forbidden name, separate and equals form.
+
+    A prefix that is itself an exact benign name (`checkpoint`) resolves to
+    that name instead and is covered by the allowed-interval tests.
+    """
+    known = GNU_TAR_DIALECT.long_options | BSD_TAR_DIALECT.long_options
+    for name in sorted(TAR_PROHIBITED_LONG_OPTIONS):
+        for length in range(1, len(name) + 1):
+            prefix = name[:length]
+            if prefix != name and prefix in known:
+                continue
+            yield ["tar", "-cf", "out.tar", f"--{prefix}", "helper", "dir"]
+            yield ["tar", "-cf", "out.tar", f"--{prefix}=helper", "dir"]
+
+
+@pytest.mark.parametrize("command", list(_tar_long_option_spellings()))
+def test_tar_external_program_long_option_spellings_are_rejected(
+    validator, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "tar")
+
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator.validate_command(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # Short -I/-F in clusters, attached, separated and old-style words.
+        ["tar", "-I/bin/sh", "-cf", "x.tar", "file"],
+        ["tar", "-I", "helper", "-cf", "x.tar", "file"],
+        ["tar", "-cI", "helper", "-f", "x.tar", "file"],
+        ["tar", "-cvzIhelper", "-f", "x.tar", "file"],
+        ["tar", "-cF", "helper", "-f", "x.tar", "file"],
+        ["tar", "-Fhelper", "-cf", "x.tar", "file"],
+        ["tar", "-cf", "x.tar", "-MF", "helper", "file"],
+        ["tar", "cIf", "helper", "x.tar", "file"],
+        ["tar", "cfF", "x.tar", "helper", "file"],
+        ["tar", "Icf", "helper", "x.tar", "file"],
+        # Every checkpoint action is denied, not only exec=.
+        ["tar", "--checkpoint=1", "--checkpoint-action=dot", "-cf", "x.tar", "f"],
+        ["tar", "--checkpoint-action", "echo", "-cf", "x.tar", "file"],
+        # The rmt prefix and ambiguous prefixes containing forbidden names.
+        ["tar", "--rm", "helper", "-cf", "host:x.tar", "file"],
+        ["tar", "--rm=helper", "-cf", "host:x.tar", "file"],
+        ["tar", "--to", "helper", "-xf", "x.tar"],
+        ["tar", "--new", "helper", "-cf", "x.tar", "file"],
+        # Options after operands are still options (GNU permutation).
+        ["tar", "-cf", "x.tar", "file", "--to-command=helper"],
+        ["tar", "-cf", "x.tar", "file", "-I", "helper"],
+        ["tar", "cf", "x.tar", "file", "--rsh-command=helper"],
+        ["tar", "-xf", "x.tar", "member", "-F", "helper"],
+        # Exact no-value or optional-value names do not swallow the next option.
+        ["tar", "--checkpoint", "--use-compress-program=helper", "-cf", "x", "f"],
+        ["tar", "--list", "--to-command=helper", "-f", "x.tar"],
+        ["tar", "--sparse", "--info-script=helper", "-cf", "x.tar", "file"],
+        ["tar", "--xattrs", "--new-volume-script=helper", "-cf", "x.tar", "f"],
+        ["tar", "--totals", "--use-compress-program=helper", "-cf", "x", "f"],
+        # A required value of `--` does not end option scanning.
+        ["tar", "-c", "-f", "--", "--use-compress-program=helper", "file"],
+        ["tar", "-cf", "--", "--to-command=helper", "file"],
+        ["tar", "cf", "--", "--use-compress-program=helper", "file"],
+        ["tar", "-cC", "--", "-I", "helper", "-f", "x.tar", "file"],
+        # GNU -W means verify and does not take the next token.
+        ["tar", "-cW", "--to-command=helper", "-f", "x.tar", "file"],
+        ["tar", "-W", "--rsh-command=helper", "-cf", "host:x.tar", "file"],
+        # Unknown or ambiguous names never manufacture value consumption.
+        ["tar", "--no-such-option", "--to-command=helper", "-xf", "x.tar"],
+        ["tar", "--ex", "--use-compress-program=helper", "-cf", "x", "f"],
+        # bsdtar: H/L take no value, so the following helper option is real.
+        ["tar", "-cH", "--use-compress-program=helper", "-f", "x.tar", "file"],
+        ["tar", "-cL", "--use-compress-program", "helper", "-f", "x.tar", "f"],
+        ["tar", "-cHWuse-compress-program=helper", "-f", "x.tar", "file"],
+        ["tar", "-cLWuse-compress-program=helper", "-f", "x.tar", "file"],
+        ["tar", "cHf", "x.tar", "--use-compress-program=helper", "file"],
+        ["tar", "cLf", "x.tar", "--use-compress-program=helper", "file"],
+        # bsdtar: hyphen-style -W dispatches a long option.
+        ["tar", "-c", "-Wuse-compress-program=helper", "-f", "x.tar", "file"],
+        ["tar", "-c", "-W", "use-compress-program=helper", "-f", "x.tar", "f"],
+        ["tar", "-c", "-W", "use-compress-program", "helper", "-f", "x", "f"],
+        ["tar", "-c", "-Wuse-comp=helper", "-f", "x.tar", "file"],
+        ["tar", "-c", "-W", "u", "helper", "-f", "x.tar", "file"],
+        ["tar", "-cWexclude", "--use-compress-program=helper", "-f", "x", "f"],
+        # bsdtar: --mo/--mod are no-value modification-time, GNU --mode.
+        ["tar", "--mo", "--use-compress-program=helper", "-cf", "x.tar", "f"],
+        ["tar", "--mod", "--use-compress-program", "helper", "-cf", "x", "f"],
+        # bsdtar: a bare `-` is an empty short group, not an operand.
+        ["tar", "-c", "-", "-L", "--use-compress-program", "P", "-f", "-", "x"],
+        ["tar", "-c", "-", "-H", "--use-compress-program", "P", "-f", "-", "x"],
+    ],
+)
+def test_tar_external_program_option_forms_are_rejected(
+    validator, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "tar")
+
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator.validate_command(command)
+
+
+@pytest.mark.parametrize(
+    "argv0", ["tar", "gtar", "bsdtar", "/usr/bin/tar", "/opt/homebrew/bin/gtar"]
+)
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--to-c=helper", "-xf", "x.tar"],
+        ["-cIhelper", "-f", "x.tar", "file"],
+        ["-cHWuse-compress-program=helper", "-f", "x.tar", "file"],
+    ],
+)
+def test_tar_aliases_share_dual_dialect_policy(validator, monkeypatch, argv0, args):
+    clear_env(monkeypatch)
+    monkeypatch.setenv(
+        "ALLOW_COMMANDS", "tar,gtar,bsdtar,/usr/bin/tar,/opt/homebrew/bin/gtar"
+    )
+
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator.validate_command([argv0, *args])
+
+
+def test_tar_policy_applies_to_later_pipeline_stage(validator, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,tar")
+
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator.validate_pipeline(
+            ["echo", "x", "|", "tar", "-cf", "-", "--use-comp=helper", "-T", "-"]
+        )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["tar", "-cf", "out.tar", "dir"],
+        ["tar", "-tvf", "out.tar"],
+        ["tar", "-xf", "out.tar", "-C", "dest"],
+        ["tar", "cf", "out.tar", "dir"],
+        ["tar", "xvf", "out.tar"],
+        ["tar", "-czf", "out.tar.gz", "dir"],
+        ["tar", "-cjf", "out.tar.bz2", "dir"],
+        ["tar", "-cJf", "out.tar.xz", "dir"],
+        ["tar", "--create", "--gzip", "--file=out.tar.gz", "dir"],
+        ["tar", "--extract", "--file", "out.tar", "--directory", "dest"],
+        # Checkpoint intervals stay usable; only actions are denied.
+        ["tar", "--checkpoint=10", "-cf", "out.tar", "dir"],
+        ["tar", "--checkpoint", "-cf", "out.tar", "dir"],
+        # Optional values attach with `=`.
+        ["tar", "--totals=USR1", "-cf", "out.tar", "dir"],
+        ["tar", "--backup=numbered", "-xf", "out.tar"],
+        ["tar", "--atime-preserve=system", "-cf", "out.tar", "dir"],
+        ["tar", "--occurrence=2", "-xf", "out.tar", "member"],
+        ["tar", "--one-top-level=dest", "-xf", "out.tar"],
+        # Option-looking tokens after an unconsumed `--` are operands.
+        ["tar", "-cf", "out.tar", "--", "--use-compress-program=x", "-I", "-F"],
+        ["tar", "-c", "-f", "-", "-"],
+        # Values containing I/F or helper-looking text are data in both walks.
+        ["tar", "-cf", "IF.tar", "dir"],
+        ["tar", "-cfIF.tar", "dir"],
+        ["tar", "-cC", "Idir", "-f", "out.tar", "file"],
+        ["tar", "-cf", "out.tar", "--exclude", "--to-command=x", "dir"],
+        ["tar", "-cf", "out.tar", "--exclude=-Ihelper", "dir"],
+        ["tar", "-cf", "out.tar", "-X", "--use-compress-program=x", "dir"],
+        ["tar", "-cf", "out.tar", "--directory", "-I", "file"],
+        # Unique abbreviations of benign required options consume values.
+        ["tar", "-cf", "out.tar", "--exclude-fr", "--info-script", "dir"],
+        ["tar", "-cf", "out.tar", "--strip", "-F", "dir"],
+        # bsdtar -W with benign required and no-value long options.
+        ["tar", "-cf", "out.tar", "-Wexclude=foo", "dir"],
+        ["tar", "-cf", "out.tar", "-W", "exclude", "foo", "dir"],
+        ["tar", "-cf", "out.tar", "-W", "totals", "dir"],
+        ["tar", "-cWf", "out.tar", "dir"],
+        ["tar", "-cvf", "out.tar", "dir", "-W"],
+        # Old-style W just takes its argument.
+        ["tar", "cWf", "verify-arg", "out.tar", "dir"],
+        ["gtar", "-czf", "out.tgz", "dir"],
+        ["bsdtar", "-xf", "out.tar"],
+    ],
+)
+def test_ordinary_tar_arguments_remain_allowed(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "tar,gtar,bsdtar")
+
+    validator.validate_command(command)
+
+
+@pytest.mark.parametrize("letter", sorted("gfLbHVKNCTX"))
+def test_tar_gnu_required_short_values_are_data(validator, monkeypatch, letter):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "tar")
+
+    # Separated: GNU consumes the value; bsdtar either consumes it too or
+    # stops at it as the first operand.
+    validator.validate_command(["tar", "-c", f"-{letter}", "IF-data", "x.tar"])
+    validator._validate_tar_arguments([f"-{letter}", "-I"], GNU_TAR_DIALECT)
+    validator._validate_tar_arguments([f"-c{letter}-Ihelper"], GNU_TAR_DIALECT)
+    validator._validate_tar_arguments([f"c{letter}", "-I"], GNU_TAR_DIALECT)
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator._validate_tar_arguments(
+            [f"-{letter}", "value", "--to-command=helper"], GNU_TAR_DIALECT
+        )
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator._validate_tar_arguments(
+            [f"c{letter}", "value", "-I", "helper"], GNU_TAR_DIALECT
+        )
+
+
+@pytest.mark.parametrize("letter", sorted("bCfsTWX"))
+def test_tar_bsd_required_short_values_are_data(validator, letter):
+    validator._validate_tar_arguments([f"-{letter}", "-Ihelper"], BSD_TAR_DIALECT)
+    if letter != "W":
+        validator._validate_tar_arguments([f"-c{letter}-Ihelper"], BSD_TAR_DIALECT)
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator._validate_tar_arguments(
+            [f"-{letter}", "value", "--use-compress-program=helper"], BSD_TAR_DIALECT
+        )
+
+
+@pytest.mark.parametrize(
+    ("dialect", "name"),
+    [
+        (dialect, name)
+        for dialect in (GNU_TAR_DIALECT, BSD_TAR_DIALECT)
+        for name in sorted(
+            dialect.long_options_with_required_value - TAR_PROHIBITED_LONG_OPTIONS
+        )
+    ],
+)
+def test_tar_benign_required_long_option_values_are_data(validator, dialect, name):
+    validator._validate_tar_arguments(
+        [f"--{name}", "--use-compress-program=helper"], dialect
+    )
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator._validate_tar_arguments(
+            [f"--{name}", "value", "--use-compress-program=helper"], dialect
+        )
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator._validate_tar_arguments(
+            [f"--{name}=value", "--use-compress-program=helper"], dialect
+        )
+
+
+@pytest.mark.parametrize(
+    ("dialect", "name"),
+    [
+        (dialect, name)
+        for dialect in (GNU_TAR_DIALECT, BSD_TAR_DIALECT)
+        for name in sorted(dialect.long_options_without_separate_value)
+    ],
+)
+def test_tar_no_value_long_options_do_not_swallow_next_option(validator, dialect, name):
+    with pytest.raises(ValueError, match=TAR_POLICY_ERROR_PATTERN):
+        validator._validate_tar_arguments(
+            [f"--{name}", "--use-compress-program=helper"], dialect
+        )
+
+
+def test_tar_dialect_tables_shadow_their_prefix_extensions():
+    """Exact names that are prefixes of longer names keep their own arity."""
+    for name in ("checkpoint", "list", "sparse", "xattrs", "totals"):
+        assert name in GNU_TAR_DIALECT.long_options_without_separate_value
+    assert "mode" in GNU_TAR_DIALECT.long_options_with_required_value
+    assert "modification-time" in BSD_TAR_DIALECT.long_options_without_separate_value
+    assert "totals" in BSD_TAR_DIALECT.long_options_without_separate_value
+    for dialect in (GNU_TAR_DIALECT, BSD_TAR_DIALECT):
+        assert not (
+            dialect.long_options_with_required_value
+            & dialect.long_options_without_separate_value
+        )

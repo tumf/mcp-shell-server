@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Dict, List
+from typing import Dict, FrozenSet, List, NamedTuple
 
 SHELL_METACHAR_PATTERN = re.compile(r"[\s;&|<>`\n\r]")
 DANGEROUS_COMMANDS = {
@@ -290,6 +290,132 @@ GIT_SUBCOMMAND_GRAMMARS: Dict[str, Dict] = {
 }
 
 
+class TarDialect(NamedTuple):
+    """Finite option grammar of one tar implementation.
+
+    Only the arity of each option matters to the policy: a required value is
+    data and is never rescanned as an option within the same dialect.
+    """
+
+    long_options_with_required_value: FrozenSet[str]
+    # No-value and optional-value names. An optional value is only ever
+    # attached with `=`, so neither kind consumes the following argv token.
+    long_options_without_separate_value: FrozenSet[str]
+    short_options_with_required_value: FrozenSet[str]
+    # GNU argp permutes options after operands; bsdtar stops at the first one.
+    stops_at_first_operand: bool
+    # bsdtar `-W name[=value]` (hyphen form only) is the long option `--name`.
+    hyphen_w_is_long_option: bool
+
+    @property
+    def long_options(self) -> FrozenSet[str]:
+        return (
+            self.long_options_with_required_value
+            | self.long_options_without_separate_value
+        )
+
+
+# GNU tar 1.34 options[] table (src/tar.c), names grouped by arity. The argp
+# hidden `program-name` and `HANG` options are deliberately absent so an
+# abbreviation of them never manufactures value consumption.
+GNU_TAR_DIALECT = TarDialect(
+    long_options_with_required_value=frozenset("""
+        add-file after-date blocking-factor checkpoint-action directory exclude
+        exclude-from exclude-ignore exclude-ignore-recursive exclude-tag
+        exclude-tag-all exclude-tag-under file files-from format group
+        group-map hole-detection index-file info-script label level
+        listed-incremental mode mtime new-volume-script newer newer-mtime
+        no-quote-chars owner owner-map pax-option quote-chars quoting-style
+        record-size rmt-command rsh-command sort sparse-version
+        starting-file strip-components suffix tape-length to-command transform
+        use-compress-program volno-file warning xattrs-exclude xattrs-include
+        xform
+        """.split()),
+    long_options_without_separate_value=frozenset("""
+        absolute-names acls anchored append auto-compress block-number bzip2
+        catenate check-device check-links clamp-mtime compare compress
+        concatenate confirmation create delay-directory-restore delete
+        dereference diff exclude-backups exclude-caches exclude-caches-all
+        exclude-caches-under exclude-vcs exclude-vcs-ignores extract
+        force-local full-time get gunzip gzip hard-dereference help
+        ignore-case ignore-command-error ignore-failed-read ignore-zeros
+        incremental interactive keep-directory-symlink keep-newer-files
+        keep-old-files list lzip lzma lzop multi-volume no-acls no-anchored
+        no-auto-compress no-check-device no-delay-directory-restore
+        no-ignore-case no-ignore-command-error no-null no-overwrite-dir
+        no-recursion no-same-owner no-same-permissions no-seek no-selinux
+        no-unquote no-verbatim-files-from no-wildcards
+        no-wildcards-match-slash no-xattrs null numeric-owner old-archive
+        one-file-system overwrite overwrite-dir portability posix preserve
+        preserve-order preserve-permissions read-full-records recursion
+        recursive-unlink remove-files restrict same-order same-owner
+        same-permissions seek selinux show-defaults show-omitted-dirs
+        show-snapshot-field-ranges show-stored-names show-transformed-names
+        skip-old-files sparse test-label to-stdout touch uncompress ungzip
+        unlink-first unquote update usage utc verbatim-files-from verbose
+        verify version wildcards wildcards-match-slash xattrs xz zstd
+        """.split())
+    # Optional-value names, accepted only as `--name[=VALUE]`.
+    | frozenset(
+        "atime-preserve backup checkpoint occurrence one-top-level totals".split()
+    ),
+    short_options_with_required_value=frozenset("gfLFbHVIKNCTX"),
+    stops_at_first_operand=False,
+    hyphen_w_is_long_option=False,
+)
+
+# Union of the libarchive bsdtar 3.5.3 and 3.7.4 tar_longopts tables
+# (tar/cmdline.c) and short_options "aBb:C:cf:HhI:JjkLlmnOoPpqrSs:T:tUuvW:wX:xyZz".
+# bsdtar has no optional-value long options.
+BSD_TAR_DIALECT = TarDialect(
+    long_options_with_required_value=frozenset("""
+        block-size blocking-factor cd directory exclude exclude-from file
+        files-from format gid gname group include newer newer-ctime
+        newer-ctime-than newer-mtime newer-mtime-than newer-than older
+        older-ctime older-ctime-than older-mtime older-mtime-than older-than
+        options owner passphrase strip-components uid uname
+        use-compress-program
+        """.split()),
+    long_options_without_separate_value=frozenset("""
+        absolute-paths acls append auto-compress b64encode bunzip2 bzip bzip2
+        check-links chroot clear-nochange-fflags compress confirmation create
+        dereference disable-copyfile exclude-vcs extract fast-read fflags
+        grzip gunzip gzip help hfsCompression ignore-zeros insecure
+        interactive keep-newer-files keep-old-files list lrzip lz4 lzip lzma
+        lzop mac-metadata modification-time no-acls no-fflags no-mac-metadata
+        no-read-sparse no-recursion no-safe-writes no-same-owner
+        no-same-permissions no-xattr no-xattrs nodump nopreserveHFSCompression
+        norecurse null numeric-owner one-file-system posix
+        preserve-permissions read-full-blocks read-sparse safe-writes
+        same-owner same-permissions to-stdout totals uncompress unlink
+        unlink-first update uuencode verbose version xattrs xz zstd
+        """.split()),
+    short_options_with_required_value=frozenset("bCfIsTWX"),
+    stops_at_first_operand=True,
+    hyphen_w_is_long_option=True,
+)
+
+# Options that run an external program. Every checkpoint action is denied, not
+# only `exec=`, so the secondary action grammar never needs to be parsed.
+TAR_PROHIBITED_LONG_OPTIONS = frozenset(
+    {
+        "checkpoint-action",
+        "info-script",
+        "new-volume-script",
+        "rmt-command",
+        "rsh-command",
+        "to-command",
+        "use-compress-program",
+    }
+)
+# GNU -I/--use-compress-program and -F/--info-script; bsdtar -I is rejected
+# with the same rule because the policy does not depend on the dialect.
+TAR_PROHIBITED_SHORT_OPTIONS = frozenset("IF")
+TAR_POLICY_ERROR = (
+    "Command rejected by default security policy: tar command execution option"
+)
+
+
 class CommandValidator:
     """Validates argv commands against allowlists and default deny rules."""
 
@@ -348,14 +474,6 @@ class CommandValidator:
             raise ValueError(f"Unexpected shell operator: {cmd}")
         if any(operator in cmd for operator in [";", "&&", "||", "`", "\n", "\r"]):
             raise ValueError(f"Unexpected shell operator: {cmd}")
-
-    def _has_option_value(self, args: List[str], option: str, predicate) -> bool:
-        for index, arg in enumerate(args):
-            if arg == option and index + 1 < len(args) and predicate(args[index + 1]):
-                return True
-            if arg.startswith(f"{option}=") and predicate(arg.split("=", 1)[1]):
-                return True
-        return False
 
     def _has_any_option(self, args: List[str], options: set[str]) -> bool:
         return any(
@@ -534,6 +652,75 @@ class CommandValidator:
                 return False
         return False
 
+    def _tar_long_option_consumes_next(self, text: str, dialect: TarDialect) -> bool:
+        """Reject a forbidden long option; return whether it takes the next token.
+
+        `text` is the option without its `--` prefix (or the bsdtar `-W` text).
+        An exact name wins; otherwise every name it abbreviates is a candidate
+        and any forbidden candidate rejects. Only a unique required-value name
+        written without `=` consumes the following token; unknown and ambiguous
+        names never manufacture a value.
+        """
+        name, separator, _value = text.partition("=")
+        candidates = (
+            {name}
+            if name in dialect.long_options
+            else {option for option in dialect.long_options if option.startswith(name)}
+        )
+        if candidates & TAR_PROHIBITED_LONG_OPTIONS:
+            raise ValueError(TAR_POLICY_ERROR)
+        return (
+            not separator
+            and len(candidates) == 1
+            and candidates <= dialect.long_options_with_required_value
+        )
+
+    def _validate_tar_arguments(self, args: List[str], dialect: TarDialect) -> None:
+        """Reject tar external-program options reachable under one dialect.
+
+        Each dialect keeps its own cursor: a token consumed as a value in one
+        walk may be a real option in the other, so both walks must pass.
+        """
+        index = 0
+        if args and not args[0].startswith("-"):
+            # Old-style first word: every letter is an option and each
+            # required value is taken from the following tokens in order,
+            # even when that token is `--`. Old-style bsdtar W only takes
+            # its argument; it does not dispatch a long option.
+            index = 1
+            for letter in args[0]:
+                if letter in TAR_PROHIBITED_SHORT_OPTIONS:
+                    raise ValueError(TAR_POLICY_ERROR)
+                if letter in dialect.short_options_with_required_value:
+                    index += 1
+        while index < len(args):
+            arg = args[index]
+            index += 1
+            if arg == "--":
+                return
+            if arg.startswith("--"):
+                if self._tar_long_option_consumes_next(arg[2:], dialect):
+                    index += 1
+            elif arg.startswith("-"):
+                # A bare `-` is an empty bsdtar short group and a GNU
+                # operand; neither ends option scanning.
+                for position, letter in enumerate(arg[1:], start=1):
+                    if letter in TAR_PROHIBITED_SHORT_OPTIONS:
+                        raise ValueError(TAR_POLICY_ERROR)
+                    if letter not in dialect.short_options_with_required_value:
+                        continue
+                    value = arg[position + 1 :]
+                    if not value:
+                        value = args[index] if index < len(args) else ""
+                        index += 1
+                    if value and letter == "W" and dialect.hyphen_w_is_long_option:
+                        if self._tar_long_option_consumes_next(value, dialect):
+                            index += 1
+                    # The rest of the cluster is the value, not options.
+                    break
+            elif dialect.stops_at_first_operand:
+                return
+
     def _validate_sort_arguments(self, args: List[str]) -> None:
         """Reject `sort` options that reach outside the validated argv boundary.
 
@@ -606,18 +793,11 @@ class CommandValidator:
                 "Command rejected by default security policy: awk external access"
             )
 
-        if cmd == "tar" and (
-            self._has_option_value(
-                args, "--checkpoint-action", lambda value: value.startswith("exec=")
-            )
-            or self._has_any_option(
-                args, {"--to-command", "--use-compress-program", "--rsh-command"}
-            )
-            or self._has_short_option_prefix(args, "-I")
-        ):
-            raise ValueError(
-                "Command rejected by default security policy: tar command execution option"
-            )
+        if cmd == "tar":
+            # The executable spelling does not select a dialect: either
+            # interpretation reaching a helper option rejects the command.
+            self._validate_tar_arguments(args, GNU_TAR_DIALECT)
+            self._validate_tar_arguments(args, BSD_TAR_DIALECT)
 
         if cmd == "sort":
             self._validate_sort_arguments(args)

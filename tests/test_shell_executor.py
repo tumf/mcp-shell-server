@@ -2,6 +2,7 @@ import asyncio
 import io
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 from unittest.mock import AsyncMock
@@ -1816,3 +1817,210 @@ async def test_executor_allows_ordinary_git_operations(
 
     assert result["status"] == 0, result
     mock_process_manager.create_process.assert_awaited()
+
+
+TAR_POLICY_ERROR = "tar command execution option"
+
+
+def _write_tar_helper(path, marker):
+    """Write a pass-through helper that records that tar launched it."""
+    path.write_text(f'#!/bin/sh\ntouch "{marker}"\nexec cat\n')
+    path.chmod(0o755)
+    return path
+
+
+def _find_tar_binary(signature):
+    for candidate in ("tar", "gtar", "bsdtar"):
+        try:
+            probe = subprocess.run(
+                [candidate, "--version"], capture_output=True, text=True
+            )
+        except OSError:
+            continue
+        if probe.returncode == 0 and signature in probe.stdout:
+            return candidate
+    return None
+
+
+GNU_TAR_BINARY = _find_tar_binary("GNU tar")
+BSD_TAR_BINARY = _find_tar_binary("bsdtar")
+
+
+@pytest.fixture
+def tar_workspace(tmp_path, monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "echo,tar,gtar,bsdtar")
+    (tmp_path / "data.txt").write_text("payload\n")
+    marker = tmp_path / "tar-helper-marker"
+    helper = _write_tar_helper(tmp_path / "helper", marker)
+    return tmp_path, helper, marker
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["tar", "-c", "--use-compress-prog={helper}", "-f", "out.tar", "data.txt"],
+        ["gtar", "-cI{helper}", "-f", "out.tar", "data.txt"],
+        ["tar", "cIf", "{helper}", "out.tar", "data.txt"],
+        ["tar", "-cf", "out.tar", "data.txt", "--to-c={helper}"],
+        ["tar", "-cf", "out.tar", "--checkpoint=1", "--checkpoint-a=exec={helper}"],
+        ["tar", "-cf", "host:out.tar", "--rsh={helper}", "data.txt"],
+        ["tar", "-cf", "host:out.tar", "--rm", "{helper}", "data.txt"],
+        ["tar", "-cMF", "{helper}", "-f", "out.tar", "data.txt"],
+        ["tar", "-cM", "--new-v={helper}", "-f", "out.tar", "data.txt"],
+        ["bsdtar", "-cHWuse-compress-program={helper}", "-f", "out.tar", "data.txt"],
+        [
+            "bsdtar",
+            "-c",
+            "-",
+            "-L",
+            "--use-compress-program",
+            "{helper}",
+            "-f",
+            "out.tar",
+            "data.txt",
+        ],
+        [
+            "tar",
+            "--mo",
+            "--use-compress-program={helper}",
+            "-cf",
+            "out.tar",
+            "data.txt",
+        ],
+        ["tar", "-c", "-f", "--", "--use-compress-program={helper}", "data.txt"],
+    ],
+)
+@pytest.mark.asyncio
+async def test_tar_execution_option_is_rejected_before_launch(
+    tar_workspace, no_process_creation, argv
+):
+    work, helper, marker = tar_workspace
+    argv = [arg.format(helper=helper) for arg in argv]
+
+    result = await ShellExecutor().execute(argv, str(work))
+
+    assert result["status"] == 1
+    assert TAR_POLICY_ERROR in result["error"]
+    assert not marker.exists()
+    assert not (work / "out.tar").exists()
+    assert not (work / "--").exists()
+    no_process_creation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_tar_execution_option_in_pipeline_stage_is_rejected_before_launch(
+    tar_workspace, no_process_creation
+):
+    work, helper, marker = tar_workspace
+
+    result = await ShellExecutor().execute(
+        ["echo", "data.txt", "|", "tar", "-c", f"--to-com={helper}", "-T", "-"],
+        str(work),
+    )
+
+    assert result["status"] == 1
+    assert TAR_POLICY_ERROR in result["error"]
+    assert not marker.exists()
+    no_process_creation.assert_not_awaited()
+
+
+@pytest.mark.skipif(
+    GNU_TAR_BINARY is None and BSD_TAR_BINARY is None, reason="tar is not installed"
+)
+@pytest.mark.asyncio
+async def test_ordinary_tar_create_and_list_succeed(tar_workspace):
+    work, _helper, marker = tar_workspace
+
+    created = await ShellExecutor().execute(
+        ["tar", "-cf", "out.tar", "--", "data.txt"], str(work)
+    )
+    listed = await ShellExecutor().execute(["tar", "-tf", "out.tar"], str(work))
+    piped = await ShellExecutor().execute(
+        ["tar", "-cf", "-", "data.txt", "|", "tar", "-tf", "-"], str(work)
+    )
+
+    assert created["status"] == 0, created
+    assert (work / "out.tar").exists()
+    assert listed["status"] == 0, listed
+    assert listed["stdout"].split() == ["data.txt"]
+    assert piped["status"] == 0, piped
+    assert piped["stdout"].split() == ["data.txt"]
+    assert not marker.exists()
+
+
+async def _assert_tar_payload_runs_then_is_rejected(
+    monkeypatch, binary, args, work, helper, marker
+):
+    """Prove the payload launches the helper directly, then is denied pre-launch."""
+    executable = shutil.which(binary)
+    argv = [executable, *[arg.format(helper=helper) for arg in args]]
+
+    subprocess.run(argv, cwd=work, capture_output=True, timeout=30)
+    assert marker.exists(), f"{binary} did not launch the helper for {args}"
+    marker.unlink()
+    (work / "out.tar").unlink(missing_ok=True)
+
+    monkeypatch.setenv("ALLOW_COMMANDS", executable)
+    result = await ShellExecutor().execute(argv, str(work))
+
+    assert result["status"] == 1
+    assert TAR_POLICY_ERROR in result["error"]
+    assert not marker.exists()
+    assert not (work / "out.tar").exists()
+
+
+@pytest.mark.skipif(BSD_TAR_BINARY is None, reason="bsdtar is not installed")
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["-cHWuse-compress-program={helper}", "-f", "out.tar", "data.txt"],
+        [
+            "-c",
+            "-",
+            "-L",
+            "--use-compress-program",
+            "{helper}",
+            "-f",
+            "out.tar",
+            "data.txt",
+        ],
+        ["--mo", "--use-compress-program={helper}", "-cf", "out.tar", "data.txt"],
+        ["cHf", "out.tar", "--use-compress-program={helper}", "data.txt"],
+        ["-c", "-f", "--", "--use-compress-program={helper}", "data.txt"],
+    ],
+)
+@pytest.mark.asyncio
+async def test_bsdtar_payload_executes_helper_but_is_rejected(
+    tar_workspace, monkeypatch, args
+):
+    work, helper, marker = tar_workspace
+    await _assert_tar_payload_runs_then_is_rejected(
+        monkeypatch, BSD_TAR_BINARY, args, work, helper, marker
+    )
+
+
+@pytest.mark.skipif(GNU_TAR_BINARY is None, reason="GNU tar is not installed")
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["-cI{helper}", "-f", "out.tar", "data.txt"],
+        ["-c", "--use-compress-prog={helper}", "-f", "out.tar", "data.txt"],
+        ["cIf", "{helper}", "out.tar", "data.txt"],
+        [
+            "-cf",
+            "out.tar",
+            "--checkpoint=1",
+            "--checkpoint-a=exec={helper}",
+            "data.txt",
+        ],
+    ],
+)
+@pytest.mark.asyncio
+async def test_gnu_tar_payload_executes_helper_but_is_rejected(
+    tar_workspace, monkeypatch, args
+):
+    work, helper, marker = tar_workspace
+    await _assert_tar_payload_runs_then_is_rejected(
+        monkeypatch, GNU_TAR_BINARY, args, work, helper, marker
+    )
