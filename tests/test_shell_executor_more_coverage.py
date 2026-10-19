@@ -48,8 +48,11 @@ async def test_private_validate_command_and_pipeline_ok(monkeypatch):
     assert isinstance(result, dict)
 
 
+@pytest.mark.parametrize("async_kill", [False, True])
 @pytest.mark.asyncio
-async def test_execute_timeout_with_stdout_handle_closed(monkeypatch, temp_test_dir):
+async def test_execute_timeout_with_stdout_handle_closed(
+    monkeypatch, temp_test_dir, async_kill
+):
     """Test execute method with timeout that closes stdout handle (covers lines 294, 300)."""
     monkeypatch.setenv("ALLOW_COMMANDS", "sleep")
 
@@ -72,7 +75,11 @@ async def test_execute_timeout_with_stdout_handle_closed(monkeypatch, temp_test_
         async def kill_side_effect():
             raise ProcessLookupError("Process not found")
 
-        mock_process.kill = AsyncMock(side_effect=kill_side_effect)
+        mock_process.kill = (
+            AsyncMock(side_effect=kill_side_effect)
+            if async_kill
+            else MagicMock(side_effect=ProcessLookupError("Process not found"))
+        )
         mock_process.wait = AsyncMock()
         mock_process_manager.create_process = AsyncMock(return_value=mock_process)
 
@@ -92,6 +99,8 @@ async def test_execute_timeout_with_stdout_handle_closed(monkeypatch, temp_test_
         # Should return timeout error
         assert "timed out" in result["error"]
         assert result["status"] == -1
+        mock_process.kill.assert_called()
+        mock_process.wait.assert_awaited()
 
         # Verify stdout handle close was called (covers line 300)
         assert mock_stdout.close_call_count == 1
