@@ -706,6 +706,12 @@ SEND_EMAIL_REJECTED = [
     # removing an early-pass flag reveals a real target
     ["--subject", "--no-identity", "VALUE", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
     ["--subject", "-h", "VALUE", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    # an early-pass flag with an attached value stays for the main pass,
+    # where `h` abbreviates header-cmd
+    ["--h=" + SEND_EMAIL_HELPER],
+    ["-h=" + SEND_EMAIL_HELPER],
+    ["+H=" + SEND_EMAIL_HELPER],
+    ["--h=", "PATCH"],
     # values and flags that do not hide a later target
     ["--smtp-pass", "secret", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
     ["--smtp-debug", "1", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
@@ -755,6 +761,7 @@ def test_git_send_email_selectors_are_rejected_after_global_options(
     "args",
     [
         ["-h"],
+        ["-h", "VALUE"],
         ["--dump-aliases"],
         ["--dry-run", "PATCH"],
         ["--smtp-server=smtp.example.invalid", "--dry-run", "PATCH"],

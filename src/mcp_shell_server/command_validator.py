@@ -701,7 +701,8 @@ class CommandValidator:
         """Run one Getopt::Long pass_through pass and return the residual argv.
 
         Recognized options and their consumed values are removed. Unknown,
-        ambiguous and ordinary tokens are retained and never consume a value.
+        ambiguous and ordinary tokens, and flags given an attached value, are
+        retained and never consume a value.
         An unconsumed `--` ends the pass and is retained with what follows it.
         In the main pass a reachable program selector is rejected.
         """
@@ -735,6 +736,12 @@ class CommandValidator:
                 residual.append(arg)
                 continue
             option = candidates.pop()
+            if separator and not option.arity:
+                # A flag given `=value` is an error that pass_through restores
+                # to argv, so a later pass still parses it (`--h=P` reaches
+                # header-cmd in the main pass).
+                residual.append(arg)
+                continue
             following = args[index] if index < len(args) else None
             value: str | None = attached if separator else None
             if not separator and following is not None:
