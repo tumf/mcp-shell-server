@@ -50,7 +50,16 @@ DANGEROUS_COMMANDS = {
     "watch",
     "xargs",
     "zip",
+    # Known execution wrappers and JS runtimes that launch arbitrary programs
+    # or code. Rejected categorically, including version/attach-only forms.
+    "setarch",
+    "strace",
+    "valgrind",
+    "deno",
+    "bun",
 }
+
+FIND_EXECUTION_PRIMARIES = {"-exec", "-execdir", "-ok", "-okdir"}
 
 COMMAND_POLICY_ALIASES = {
     "bfind": "find",
@@ -357,7 +366,7 @@ class CommandValidator:
             raise ValueError(f"Command rejected by default security policy: {cmd}")
 
         if cmd == "find":
-            if any(arg in {"-exec", "-execdir"} for arg in args):
+            if any(arg in FIND_EXECUTION_PRIMARIES for arg in args):
                 raise ValueError(
                     "Command rejected by default security policy: find -exec"
                 )
