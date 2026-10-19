@@ -649,6 +649,23 @@ SEND_EMAIL_BASIC_REJECTED = [
     ["--sendmail-cmd", SEND_EMAIL_HELPER],
 ]
 SEND_EMAIL_REJECTED = [
+    ["--subject", "--identity=", "--sendmail-cmd=" + SEND_EMAIL_HELPER, "PATCH"],
+    ["--to", "--I=", "--cc-cmd=" + SEND_EMAIL_HELPER, "PATCH"],
+    ["--smtp-server-option", "+identity=", "--to-cmd", SEND_EMAIL_HELPER],
+    ["--subject", "--identity=", "--h=" + SEND_EMAIL_HELPER, "--dry-run", "PATCH"],
+    [
+        "--subject",
+        "--identity",
+        "",
+        "--to",
+        "--sendmail-cmd=" + SEND_EMAIL_HELPER,
+        "PATCH",
+    ],
+    ["--subject", "-I", "", "--cc", "--to-cmd", SEND_EMAIL_HELPER, "PATCH"],
+    ["--h=" + SEND_EMAIL_HELPER],
+    ["-h=" + SEND_EMAIL_HELPER],
+    ["+H=" + SEND_EMAIL_HELPER],
+    ["--h=", "PATCH"],
     *SEND_EMAIL_BASIC_REJECTED,
     # single-dash, plus, case-folded and prefix spellings
     ["-SMTP-SERVER=" + SEND_EMAIL_HELPER],
