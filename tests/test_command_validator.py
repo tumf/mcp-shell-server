@@ -703,6 +703,12 @@ SEND_EMAIL_REJECTED = [
     ["--identity=", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
     ["--subject=", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
     ["--smtp-pass=", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    # an empty attached early-pass value stays in argv for the main pass,
+    # so a preceding main-pass value option consumes it, not the selector
+    ["--subject", "--identity=", "--sendmail-cmd=" + SEND_EMAIL_HELPER, "PATCH"],
+    ["--to", "--I=", "--cc-cmd=" + SEND_EMAIL_HELPER, "PATCH"],
+    ["--smtp-server-option", "+identity=", "--to-cmd", SEND_EMAIL_HELPER],
+    ["--subject", "--identity=", "--h=" + SEND_EMAIL_HELPER, "--dry-run", "PATCH"],
     # removing an early-pass flag reveals a real target
     ["--subject", "--no-identity", "VALUE", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
     ["--subject", "-h", "VALUE", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
@@ -745,6 +751,15 @@ def test_git_send_email_program_selectors_are_rejected(validator, monkeypatch, a
         ["-C", "repo", "--no-pager", "send-email", "--sendmail-cmd=P"],
         ["--git-dir=repo/.git", "send-email", "--smtp-server", "/x"],
         ["--namespace", "ns", "send-email", "PATCH", "--to-cmd", "P"],
+        [
+            "-C",
+            "repo",
+            "send-email",
+            "--smtp-server-option",
+            "+identity=",
+            "--to-cmd",
+            "P",
+        ],
     ],
 )
 def test_git_send_email_selectors_are_rejected_after_global_options(

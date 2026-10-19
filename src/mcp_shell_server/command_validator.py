@@ -765,9 +765,10 @@ class CommandValidator:
                 )
             ):
                 raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
-            if value is None and option.arity.startswith("="):
-                # A required value is missing or invalid: Getopt::Long keeps
-                # the token unrecognized under pass_through.
+            if option.arity.startswith("=") and (value is None or value == ""):
+                # A required value is missing, invalid or attached empty
+                # (`--identity=`): Getopt::Long keeps the token unrecognized
+                # under pass_through.
                 residual.append(arg)
         return residual
 
