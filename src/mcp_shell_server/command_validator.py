@@ -2,6 +2,7 @@
 
 import os
 import re
+import string
 from typing import Dict, FrozenSet, List, NamedTuple
 
 SHELL_METACHAR_PATTERN = re.compile(r"[\s;&|<>`\n\r]")
@@ -290,6 +291,116 @@ GIT_SUBCOMMAND_GRAMMARS: Dict[str, Dict] = {
 }
 
 
+# `git send-email` option tables, frozen from Git v2.53.0
+# git-send-email.perl (https://github.com/git/git/blob/v2.53.0/git-send-email.perl).
+# The script runs three Getopt::Long passes with pass_through over the residual
+# argv: identity, then help/alias listing, then the main options. Spec suffixes
+# follow Getopt::Long: `=s`/`=i` require a value, `:s`/`:i` take an optional
+# one, `!` adds `no`/`no-` negations, and `|` separates aliases.
+GIT_SEND_EMAIL_PASSES = (
+    ("identity=s", "no-identity"),
+    ("h", "dump-aliases", "translate-aliases"),
+    (
+        "sender|from=s",
+        "in-reply-to=s",
+        "reply-to=s",
+        "subject=s",
+        "to=s",
+        "to-cmd=s",
+        "no-to",
+        "cc=s",
+        "no-cc",
+        "bcc=s",
+        "no-bcc",
+        "chain-reply-to!",
+        "sendmail-cmd=s",
+        "smtp-server=s",
+        "smtp-server-option=s",
+        "smtp-server-port=s",
+        "smtp-user=s",
+        "smtp-pass:s",
+        "smtp-ssl",
+        "smtp-encryption=s",
+        "smtp-ssl-cert-path=s",
+        "smtp-debug:i",
+        "smtp-domain:s",
+        "smtp-auth=s",
+        "no-smtp-auth",
+        "imap-sent-folder=s",
+        "use-imap-only!",
+        "annotate!",
+        "compose",
+        "quiet",
+        "cc-cmd=s",
+        "header-cmd=s",
+        "no-header-cmd",
+        "suppress-from!",
+        "suppress-cc=s",
+        "signed-off-cc|signed-off-by-cc!",
+        "cc-cover!",
+        "to-cover!",
+        "confirm=s",
+        "dry-run",
+        "envelope-sender=s",
+        "thread!",
+        "validate!",
+        "transfer-encoding=s",
+        "mailmap!",
+        "use-mailmap!",
+        "format-patch!",
+        "8bit-encoding=s",
+        "compose-encoding=s",
+        "force",
+        "xmailer!",
+        "batch-size=i",
+        "relogin-delay=i",
+        "git-completion-helper",
+        "v=s",
+        "outlook-id-fix!",
+    ),
+)
+# Main-pass options whose selection runs a program. `smtp-server` only does so
+# for a program-like value, see `_git_send_email_smtp_server_is_program`.
+GIT_SEND_EMAIL_PROGRAM_OPTIONS = {"sendmail-cmd", "to-cmd", "cc-cmd", "header-cmd"}
+GIT_SEND_EMAIL_INTEGER_PATTERN = re.compile(r"[+-]?[0-9]+")
+GIT_SEND_EMAIL_OPTION_LIKE_PATTERN = re.compile(r"(--|-|\+).+", re.DOTALL)
+GIT_SEND_EMAIL_DRIVE_PATTERN = re.compile(r"[A-Za-z]:")
+ASCII_LOWERCASE_TABLE = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+
+
+class GitSendEmailOption(NamedTuple):
+    """Getopt::Long identity of one send-email option name.
+
+    `canonical` mirrors Getopt::Long's ambiguity check: aliases share it, and a
+    negation is `no` plus the canonical name. `arity` is the spec suffix.
+    """
+
+    canonical: str
+    arity: str
+
+
+def _git_send_email_option_table(specs) -> Dict[str, GitSendEmailOption]:
+    table: Dict[str, GitSendEmailOption] = {}
+    for spec in specs:
+        negatable = spec.endswith("!")
+        match = re.fullmatch(r"([^=:!]+)([=:][si])?!?", spec)
+        assert match is not None, spec
+        names = match.group(1).split("|")
+        canonical = names[0]
+        for name in names:
+            table[name] = GitSendEmailOption(canonical, match.group(2) or "")
+            if negatable:
+                negation = GitSendEmailOption(f"no{canonical}", "")
+                table[f"no{name}"] = negation
+                table[f"no-{name}"] = negation
+    return table
+
+
+GIT_SEND_EMAIL_OPTION_TABLES = tuple(
+    _git_send_email_option_table(specs) for specs in GIT_SEND_EMAIL_PASSES
+)
+
+
 class TarDialect(NamedTuple):
     """Finite option grammar of one tar implementation.
 
@@ -568,6 +679,104 @@ class CommandValidator:
                 if letter not in grammar["no_value_short"]:
                     raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
 
+    def _git_send_email_smtp_server_is_program(self, value: str | None) -> bool:
+        """Return whether an `--smtp-server` value may select a sendmail program.
+
+        Git treats an absolute value as a program. Missing, empty, slash or
+        backslash rooted, and drive-letter values are a conservative union of
+        POSIX and Windows spellings; hostnames and relative strings stay data.
+        """
+        return (
+            not value
+            or value.startswith(("/", "\\"))
+            or GIT_SEND_EMAIL_DRIVE_PATTERN.match(value) is not None
+        )
+
+    def _git_send_email_pass(
+        self,
+        args: List[str],
+        table: Dict[str, GitSendEmailOption],
+        main_pass: bool,
+    ) -> List[str]:
+        """Run one Getopt::Long pass_through pass and return the residual argv.
+
+        Recognized options and their consumed values are removed. Unknown,
+        ambiguous and ordinary tokens are retained and never consume a value.
+        An unconsumed `--` ends the pass and is retained with what follows it.
+        In the main pass a reachable program selector is rejected.
+        """
+        residual: List[str] = []
+        index = 0
+        while index < len(args):
+            arg = args[index]
+            index += 1
+            if arg == "--":
+                residual.extend(args[index - 1 :])
+                break
+            body = arg[2:] if arg.startswith("--") else arg[1:]
+            name, separator, attached = body.partition("=")
+            if not arg.startswith(("-", "+")) or not name:
+                residual.append(arg)
+                continue
+            name = name.translate(ASCII_LOWERCASE_TABLE)
+            if name in table:
+                candidates = {table[name]}
+            else:
+                candidates = {
+                    option for key, option in table.items() if key.startswith(name)
+                }
+            if len(candidates) != 1:
+                if main_pass and any(
+                    option.canonical in GIT_SEND_EMAIL_PROGRAM_OPTIONS
+                    or option.canonical == "smtp-server"
+                    for option in candidates
+                ):
+                    raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
+                residual.append(arg)
+                continue
+            option = candidates.pop()
+            following = args[index] if index < len(args) else None
+            value: str | None = attached if separator else None
+            if not separator and following is not None:
+                if option.arity == "=s" or (
+                    option.arity == ":s"
+                    and following != "--"
+                    and not GIT_SEND_EMAIL_OPTION_LIKE_PATTERN.fullmatch(following)
+                ):
+                    value = following
+                    index += 1
+                elif option.arity in {"=i", ":i"} and (
+                    GIT_SEND_EMAIL_INTEGER_PATTERN.fullmatch(following)
+                ):
+                    value = following
+                    index += 1
+            if main_pass and (
+                option.canonical in GIT_SEND_EMAIL_PROGRAM_OPTIONS
+                or (
+                    option.canonical == "smtp-server"
+                    and self._git_send_email_smtp_server_is_program(value)
+                )
+            ):
+                raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
+            if value is None and option.arity.startswith("="):
+                # A required value is missing or invalid: Getopt::Long keeps
+                # the token unrecognized under pass_through.
+                residual.append(arg)
+        return residual
+
+    def _validate_git_send_email_options(self, args: List[str]) -> None:
+        """Reject `git send-email` options that select an external program.
+
+        `args` are the tokens after the subcommand. The three passes of
+        git-send-email.perl run in order, so values consumed by an earlier
+        pass are never rescanned and removed flags never hide a selector.
+        """
+        residual = args
+        for pass_index, table in enumerate(GIT_SEND_EMAIL_OPTION_TABLES):
+            residual = self._git_send_email_pass(
+                residual, table, pass_index == len(GIT_SEND_EMAIL_OPTION_TABLES) - 1
+            )
+
     def _validate_git_execution_subcommand(
         self, args: List[str], subcommand_index: int | None
     ) -> None:
@@ -585,6 +794,8 @@ class CommandValidator:
                 self._validate_git_subcommand_options(
                     subcommand_args, GIT_SUBCOMMAND_GRAMMARS[subcommand]
                 )
+            if subcommand == "send-email":
+                self._validate_git_send_email_options(subcommand_args)
             if subcommand == "rebase":
                 # rebase's own --exec handling is contextual (see above).
                 return
