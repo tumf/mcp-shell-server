@@ -638,6 +638,189 @@ def test_git_empty_is_an_exact_required_option_not_an_exec_prefix(
         validator.validate_command(["git", "rebase", "--e", "--empty"])
 
 
+# `git send-email` program selectors. H is a fixture-only absolute helper
+# path; validation never runs it and no test sends mail.
+SEND_EMAIL_HELPER = "/fixture/bin/helper"
+SEND_EMAIL_TARGETS = ["sendmail-cmd", "to-cmd", "cc-cmd", "header-cmd", "smtp-server"]
+SEND_EMAIL_BASIC_REJECTED = [
+    ["--smtp-server=" + SEND_EMAIL_HELPER],
+    ["--smtp-server", SEND_EMAIL_HELPER],
+    ["--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--sendmail-cmd", SEND_EMAIL_HELPER],
+]
+SEND_EMAIL_REJECTED = [
+    *SEND_EMAIL_BASIC_REJECTED,
+    # single-dash, plus, case-folded and prefix spellings
+    ["-SMTP-SERVER=" + SEND_EMAIL_HELPER],
+    ["+smtp-server=" + SEND_EMAIL_HELPER],
+    ["-SENDM=" + SEND_EMAIL_HELPER],
+    ["+sendm=" + SEND_EMAIL_HELPER],
+    ["--sendm=" + SEND_EMAIL_HELPER],
+    ["--header-c=" + SEND_EMAIL_HELPER],
+    ["--Header-Cmd", SEND_EMAIL_HELPER],
+    # equal and separated forms of the remaining command selectors
+    *[
+        form
+        for target in ["to-cmd", "cc-cmd", "header-cmd"]
+        for form in (
+            [f"--{target}={SEND_EMAIL_HELPER}"],
+            [f"--{target}", SEND_EMAIL_HELPER],
+        )
+    ],
+    # missing/empty values, dry-run, later replacement and suppression
+    *[
+        form
+        for target in SEND_EMAIL_TARGETS
+        for form in (
+            [f"--{target}"],
+            [f"--{target}="],
+            [f"--{target}={SEND_EMAIL_HELPER}", "--dry-run", "PATCH"],
+            ["--dry-run", f"--{target}", SEND_EMAIL_HELPER],
+            [f"--{target}={SEND_EMAIL_HELPER}", f"--{target}=replacement"],
+        )
+    ],
+    ["--header-cmd=" + SEND_EMAIL_HELPER, "--no-header-cmd"],
+    ["--sendmail-cmd=" + SEND_EMAIL_HELPER, "--smtp-server=smtp.example.invalid"],
+    # ambiguous prefixes with a protected candidate reject conservatively
+    ["--cc-c=" + SEND_EMAIL_HELPER],
+    ["--to-c=" + SEND_EMAIL_HELPER],
+    ["--smtp-serv=" + SEND_EMAIL_HELPER],
+    ["--smtp-serv", "smtp.example.invalid"],
+    ["--send=" + SEND_EMAIL_HELPER],
+    # permutation, consumed delimiters and nonconsuming values
+    ["PATCH", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--subject", "--", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--smtp-pass", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--smtp-domain", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--smtp-debug", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--batch-size", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--relogin-delay", "1.5", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--unknown-option", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--end-of-options", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--subject", "--sendmail-cmd=DATA", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--identity", "harmless", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    # an empty attached value never consumes the next token
+    ["--identity=", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--subject=", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--smtp-pass=", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    # removing an early-pass flag reveals a real target
+    ["--subject", "--no-identity", "VALUE", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--subject", "-h", "VALUE", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    # values and flags that do not hide a later target
+    ["--smtp-pass", "secret", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--smtp-debug", "1", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--batch-size", "+5", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--no-thread", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--nothread", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--chain-reply-to", "--sendmail-cmd=" + SEND_EMAIL_HELPER],
+    ["--smtp-server-port", "2525", "--smtp-server=" + SEND_EMAIL_HELPER],
+    ["-v", "2", "--to-cmd=" + SEND_EMAIL_HELPER],
+    ["--subject=--smtp-server=DATA", "--cc-cmd=" + SEND_EMAIL_HELPER],
+    # program-like SMTP servers (conservative cross-platform union)
+    *[
+        ["--smtp-server", value]
+        for value in ["/x", "\\x", "C:\\x", "c:/x", "C:x", "\\\\server\\share\\x"]
+    ],
+]
+
+
+@pytest.mark.parametrize("args", SEND_EMAIL_REJECTED)
+def test_git_send_email_program_selectors_are_rejected(validator, monkeypatch, args):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    with pytest.raises(ValueError, match="git external program"):
+        validator.validate_command(["git", "send-email", *args])
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["-C", "repo", "--no-pager", "send-email", "--sendmail-cmd=P"],
+        ["--git-dir=repo/.git", "send-email", "--smtp-server", "/x"],
+        ["--namespace", "ns", "send-email", "PATCH", "--to-cmd", "P"],
+    ],
+)
+def test_git_send_email_selectors_are_rejected_after_global_options(
+    validator, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    with pytest.raises(ValueError, match="git external program"):
+        validator.validate_command(["git", *command])
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["-h"],
+        ["--dump-aliases"],
+        ["--dry-run", "PATCH"],
+        ["--smtp-server=smtp.example.invalid", "--dry-run", "PATCH"],
+        ["--smtp-server", "localhost"],
+        ["--smtp-server=127.0.0.1"],
+        ["--smtp-server", "[::1]"],
+        ["--smtp-server=relative-host"],
+        ["--smtp-server-port", "2525"],
+        ["--smtp-server-option", "--sendmail-cmd=DATA"],
+        ["--smtp-server-o", "--smtp-server=/x"],
+        ["--subject", "--sendmail-cmd=DATA"],
+        ["--subject=--smtp-server=DATA"],
+        ["--to", "--cc-cmd=DATA"],
+        ["--from", "--header-cmd=DATA"],
+        ["--in-reply-to", "--to-cmd=DATA"],
+        ["--confirm", "--smtp-server=/x"],
+        ["--smtp-server", "--sendmail-cmd=DATA"],
+        # identity is removed with its value before the main pass
+        ["--identity", "--sendmail-cmd=DATA"],
+        ["--IDENT", "--sendmail-cmd=DATA"],
+        ["-Identity", "--sendmail-cmd=DATA"],
+        ["+identity", "--smtp-server=/x"],
+        ["--subject", "--identity", "--sendmail-cmd=DATA", "--sendmail-cmd=DATA2"],
+        # data after an unconsumed delimiter is not rescanned
+        ["--", "--sendmail-cmd=DATA"],
+        ["PATCH", "--", "--smtp-server=/x"],
+        ["--identity", "work", "--", "--to-cmd=DATA"],
+        # optional values, numerics and negations
+        ["--smtp-pass", "secret", "PATCH"],
+        ["--smtp-pass", "-", "PATCH"],
+        ["--smtp-debug", "1", "PATCH"],
+        ["--smtp-debug=0"],
+        ["--batch-size", "5", "--relogin-delay=-1"],
+        ["--no-thread", "--nochain-reply-to", "--no-signed-off-by-cc"],
+        ["--signed-off", "--no-to", "--no-cc", "--no-bcc", "--no-header-cmd"],
+        ["--no-smtp-auth", "--no-identity", "PATCH"],
+    ],
+)
+def test_git_send_email_smtp_and_data_neighbors_are_allowed(
+    validator, monkeypatch, args
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    validator.validate_command(["git", "send-email", *args])
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # only the exact subcommand dispatches the send-email grammar
+        ["send-emai", "--sendmail-cmd=P"],
+        ["log", "--sendmail-cmd=P"],
+        ["-C", "send-email", "status", "--sendmail-cmd=P"],
+        ["status", "send-email", "--sendmail-cmd=P"],
+    ],
+)
+def test_git_send_email_grammar_requires_the_exact_subcommand(
+    validator, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    validator.validate_command(["git", *command])
+
+
 @pytest.mark.parametrize(
     "command",
     [

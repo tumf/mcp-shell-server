@@ -1819,6 +1819,121 @@ async def test_executor_allows_ordinary_git_operations(
     mock_process_manager.create_process.assert_awaited()
 
 
+# One case per syntactic class of the send-email selector policy (argv after
+# `git`). The executor must reject them before any process is created.
+GIT_SEND_EMAIL_PRELAUNCH_CASES = [
+    ["send-email", "--smtp-server=/fixture/helper", "PATCH"],
+    ["send-email", "--smtp-server", "/fixture/helper", "PATCH"],
+    ["send-email", "--sendmail-cmd=/fixture/helper", "PATCH"],
+    ["send-email", "--sendmail-cmd", "/fixture/helper", "PATCH"],
+    ["send-email", "-SENDM=/fixture/helper"],
+    ["send-email", "+to-cmd", "/fixture/helper"],
+    ["send-email", "--cc-cmd="],
+    ["send-email", "--header-c", "/fixture/helper", "--no-header-cmd"],
+    ["send-email", "--dry-run", "PATCH", "--sendmail-cmd=/fixture/helper"],
+    ["send-email", "--subject", "--", "--sendmail-cmd=/fixture/helper"],
+    ["send-email", "--smtp-server", "C:\\fixture\\helper"],
+    ["-C", "repo", "--no-pager", "send-email", "--sendmail-cmd=/fixture/helper"],
+]
+GIT_SEND_EMAIL_PIPELINE_CASES = [
+    ["send-email", "--smtp-server=/fixture/helper", "PATCH"],
+    ["send-email", "--sendmail-cmd", "/fixture/helper", "PATCH"],
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", GIT_SEND_EMAIL_PRELAUNCH_CASES)
+async def test_executor_rejects_git_send_email_selectors_before_process_creation(
+    shell_executor_with_mock, mock_process_manager, tmp_path, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    result = await shell_executor_with_mock.execute(["git", *command], str(tmp_path))
+
+    _assert_git_rejected_before_launch(result, mock_process_manager)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", GIT_SEND_EMAIL_PIPELINE_CASES)
+@pytest.mark.parametrize("position", ["first", "last"])
+async def test_executor_rejects_git_send_email_selectors_in_pipeline(
+    shell_executor_with_mock,
+    mock_process_manager,
+    tmp_path,
+    monkeypatch,
+    command,
+    position,
+):
+    clear_env(monkeypatch)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git,echo,cat")
+    git = ["git", *command]
+    argv = [*git, "|", "cat"] if position == "first" else ["echo", "x", "|", *git]
+
+    result = await shell_executor_with_mock.execute(argv, str(tmp_path))
+
+    _assert_git_rejected_before_launch(result, mock_process_manager)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX executable probes")
+@pytest.mark.asyncio
+@pytest.mark.parametrize("allow_env", ["ALLOW_COMMANDS", "ALLOW_PATTERNS"])
+@pytest.mark.parametrize("option", ["--smtp-server", "--sendmail-cmd"])
+async def test_executor_rejects_git_send_email_helper_under_absolute_allowlist(
+    shell_executor_with_mock,
+    mock_process_manager,
+    tmp_path,
+    monkeypatch,
+    allow_env,
+    option,
+):
+    clear_env(monkeypatch)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
+    git_marker = tmp_path / "git-marker"
+    helper_marker = tmp_path / "helper-marker"
+    probe = _write_marker_probe(tmp_path / "bin" / "git", git_marker)
+    helper = _write_marker_probe(tmp_path / "helper" / "sendmail", helper_marker)
+    if allow_env == "ALLOW_COMMANDS":
+        monkeypatch.setenv("ALLOW_COMMANDS", str(probe))
+    else:
+        monkeypatch.setenv("ALLOW_COMMANDS", "echo")
+        monkeypatch.setenv("ALLOW_PATTERNS", "(?:.*/)?git")
+
+    result = await shell_executor_with_mock.execute(
+        [str(probe), "send-email", f"{option}={helper}", "PATCH"], str(tmp_path)
+    )
+
+    _assert_git_rejected_before_launch(result, mock_process_manager)
+    assert "probe-ran" not in result.get("stdout", "")
+    assert not git_marker.exists()
+    assert not helper_marker.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["send-email", "--smtp-server=smtp.example.invalid", "--dry-run", "PATCH"],
+        ["send-email", "--smtp-server-port", "2525", "--dump-aliases"],
+        ["send-email", "--subject", "--sendmail-cmd=DATA", "-h"],
+        ["send-email", "--", "--sendmail-cmd=DATA"],
+    ],
+)
+async def test_executor_allows_git_send_email_smtp_and_data_neighbors(
+    shell_executor_with_mock, mock_process_manager, tmp_path, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.delenv("ALLOW_PATTERNS", raising=False)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    result = await shell_executor_with_mock.execute(["git", *command], str(tmp_path))
+
+    assert result["status"] == 0, result
+    mock_process_manager.create_process.assert_awaited()
+
+
 TAR_POLICY_ERROR = "tar command execution option"
 
 
