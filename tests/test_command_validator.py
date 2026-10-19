@@ -410,6 +410,229 @@ def test_git_subcommand_c_option_is_allowed(validator, monkeypatch):
     validator.validate_command(["git", "commit", "-c", "HEAD", "--dry-run"])
 
 
+# Argv after `git`. P is a helper path without shell operators.
+GIT_EXECUTION_REJECTED = [
+    # grep pager selection
+    ["grep", "-O", "-e", "MATCH"],
+    ["grep", "-OP", "-e", "MATCH"],
+    ["grep", "-nO", "P"],
+    ["grep", "-nOP"],
+    ["grep", "-1OP"],
+    ["grep", "--open-files-in-pager", "-e", "MATCH"],
+    ["grep", "--open-files-in-pager=P"],
+    ["grep", "--op=P"],
+    ["grep", "--op", "P"],
+    ["grep", "(", "-e", "MATCH", ")", "-OP"],
+    # rebase exec
+    ["rebase", "-x", "P", "HEAD~1"],
+    ["rebase", "-xP", "HEAD~1"],
+    ["rebase", "-qx", "P"],
+    ["rebase", "-qxP"],
+    ["rebase", "--exec", "P"],
+    ["rebase", "--exec=P"],
+    ["rebase", "--ex", "P"],
+    ["rebase", "--ex=P"],
+    ["rebase", "HEAD~1", "-xP"],
+    ["rebase", "-xP", "--no-exec"],
+    # filter-branch and bisect run
+    ["filter-branch"],
+    ["filter-branch", "--tree-filter", "P", "HEAD"],
+    ["filter-branch", "--help"],
+    ["bisect", "run", "P"],
+    ["bisect", "run", "--", "P"],
+    # ambiguous target prefixes are conservatively rejected
+    ["grep", "--o=P"],
+    ["rebase", "--e=P"],
+    # a required value of `--` does not end option parsing
+    ["grep", "-e", "--", "-OP", "data"],
+    ["rebase", "--strategy", "--", "-xP"],
+    # global prefixes, repeated and reordered
+    ["-C", "repo", "grep", "-OP"],
+    ["--git-dir=repo/.git", "--work-tree", "repo", "rebase", "-xP"],
+    ["--attr-source", "HEAD", "--namespace", "ns", "-C", "repo", "filter-branch"],
+    ["--shallow-file", "x", "bisect", "run", "P"],
+    ["-C", "-x", "grep", "-OP"],
+    # --exec keeps selecting a helper outside rebase
+    ["push", "--exec=sh", "/tmp/repo"],
+    ["push", "--exec", "sh", "/tmp/repo"],
+    ["archive", "--remote=/tmp/repo", "--exec=sh", "HEAD"],
+    ["send-pack", "--exec=sh", "/tmp/repo", "main"],
+    ["ls-remote", "--exec=sh", "/tmp/repo"],
+    ["push", "--e=sh", "/tmp/repo"],
+    ["archive", "--remote=/tmp/repo", "--e", "sh", "HEAD"],
+]
+GIT_EXEC_PREFIX_REJECTED = [
+    [subcommand, *option, *operands]
+    for subcommand, operands in [
+        ("push", ["/tmp/repo"]),
+        ("archive", ["--remote=/tmp/repo", "HEAD"]),
+        ("send-pack", ["/tmp/repo", "main"]),
+        ("ls-remote", ["/tmp/repo"]),
+    ]
+    for prefix in ["--e", "--ex", "--exe", "--exec"]
+    for option in ([f"{prefix}=sh"], [prefix, "sh"])
+]
+
+
+@pytest.mark.parametrize("command", GIT_EXECUTION_REJECTED + GIT_EXEC_PREFIX_REJECTED)
+def test_git_execution_options_are_rejected(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    with pytest.raises(ValueError, match="git external program"):
+        validator.validate_command(["git", *command])
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["status", "--short"],
+        ["log", "--oneline"],
+        ["grep", "-n", "-e", "MATCH", "--", "data"],
+        ["rebase", "--onto", "main", "topic"],
+        ["bisect", "start"],
+        ["bisect", "log"],
+        ["bisect", "reset"],
+        # required values are data, never rescanned
+        ["grep", "-e", "-O", "data"],
+        ["grep", "-e--open-files-in-pager", "data"],
+        ["grep", "-ne", "-O", "data"],
+        ["grep", "-f", "-O", "data"],
+        ["grep", "--context", "-O", "data"],
+        ["grep", "--con", "1", "-e", "MATCH", "data"],
+        ["grep", "--color", "-e", "-O", "data"],
+        ["rebase", "-Xx"],
+        ["rebase", "-s", "-x"],
+        ["rebase", "-Sx"],
+        ["rebase", "-rx"],
+        ["rebase", "--onto", "--exec"],
+        ["rebase", "--strategy-option=-x"],
+        ["rebase", "--strategy-o", "-x"],
+        ["rebase", "--empty", "-x"],
+        # end of options
+        ["grep", "--", "-O", "data"],
+        ["grep", "--end-of-options", "-O", "data"],
+        ["rebase", "--", "-xP"],
+        ["rebase", "--", "--exec=P"],
+        # grep stops at its first operand
+        ["grep", "MATCH", "-OP"],
+        ["grep", "-e", "MATCH", "--", "--open-files-in-pager=P"],
+        # negations unset the option
+        ["grep", "--no-open-files-in-pager", "-e", "MATCH"],
+        ["grep", "--no-op", "-e", "MATCH"],
+        ["rebase", "--no-exec"],
+        # only an exact `run` directly after bisect dispatches
+        ["bisect", "log", "run"],
+        ["bisect", "start", "--", "run"],
+        ["bisect", "ru"],
+        ["bisect", "--", "run"],
+        # global prefix values are not subcommands or helper options
+        ["-C", "filter-branch", "status"],
+        ["--namespace", "bisect", "status"],
+        ["--attr-source", "grep", "status"],
+        ["-C", "--exec", "status"],
+        ["commit", "-c", "HEAD", "--dry-run"],
+    ],
+)
+def test_git_ordinary_operations_are_allowed(validator, monkeypatch, command):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    validator.validate_command(["git", *command])
+
+
+GIT_REQUIRED_VALUE_OPTIONS = {
+    "grep": (
+        [f"-{letter}" for letter in "ABCefm"]
+        + [
+            f"--{name}"
+            for name in [
+                "after-context",
+                "before-context",
+                "context",
+                "max-count",
+                "max-depth",
+                "threads",
+            ]
+        ],
+        ["-O", "-OP", "--open-files-in-pager=P"],
+        "-OP",
+    ),
+    "rebase": (
+        [f"-{letter}" for letter in "CsX"]
+        + [
+            f"--{name}"
+            for name in ["onto", "whitespace", "empty", "strategy", "strategy-option"]
+        ],
+        ["-x", "-xP", "--exec", "--exec=P"],
+        "-xP",
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "subcommand,option,value,target",
+    [
+        (subcommand, option, value, target)
+        for subcommand, (options, values, target) in GIT_REQUIRED_VALUE_OPTIONS.items()
+        for option in options
+        for value in values
+    ],
+)
+def test_git_required_values_are_consumed_but_later_targets_rejected(
+    validator, monkeypatch, subcommand, option, value, target
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    validator.validate_command(["git", subcommand, option, value])
+    with pytest.raises(ValueError, match="git external program"):
+        validator.validate_command(["git", subcommand, option, value, target])
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # optional values are attached only, so the next token stays an option
+        ["rebase", "-r", "-xP"],
+        ["rebase", "-S", "-xP"],
+        ["rebase", "--rebase-merges", "-xP"],
+        ["rebase", "--gpg-sign", "-xP"],
+        ["grep", "--color", "-OP"],
+        # no-value options never consume the next token
+        ["grep", "--only-matching", "-OP"],
+        ["grep", "--or", "-OP"],
+        ["rebase", "--edit-todo", "-xP"],
+        # ambiguous or unknown long names do not consume a value
+        ["grep", "--max", "-OP"],
+        ["rebase", "--str", "-xP"],
+        ["rebase", "--unknown-option", "-xP"],
+        # unknown short letters are not guessed to take a value
+        ["grep", "-Y", "-OP"],
+        ["rebase", "-Y", "-xP"],
+    ],
+)
+def test_git_option_walker_does_not_skip_execution_options(
+    validator, monkeypatch, command
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    with pytest.raises(ValueError, match="git external program"):
+        validator.validate_command(["git", *command])
+
+
+def test_git_empty_is_an_exact_required_option_not_an_exec_prefix(
+    validator, monkeypatch
+):
+    clear_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_COMMANDS", "git")
+
+    validator.validate_command(["git", "rebase", "--empty", "--exec=P"])
+    with pytest.raises(ValueError, match="git external program"):
+        validator.validate_command(["git", "rebase", "--e", "--empty"])
+
+
 @pytest.mark.parametrize(
     "command",
     [

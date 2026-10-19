@@ -158,6 +158,137 @@ AWK_SHORT_OPTIONS_WITH_OPTIONAL_ATTACHED_VALUE = {"d", "D", "L", "o", "p"}
 AWK_LONG_OPTIONS_WITH_REQUIRED_VALUE = {"assign", "field-separator"}
 AWK_EXTERNAL_DIRECTIVE_PATTERN = re.compile(r"(^|\s)@(include|nsinclude|load)\b")
 
+GIT_EXTERNAL_PROGRAM_ERROR = (
+    "Command rejected by default security policy: git external program"
+)
+# Finite Git 2.53.0 option grammar for the subcommands whose own options select
+# an external program (`grep -O`, `rebase -x`). The tables only record what is
+# needed to know which tokens are option values, so a value that looks like an
+# option is never rescanned and a real option is never hidden as a value.
+GIT_GREP_LONG_OPTIONS = {
+    "after-context",
+    "all-match",
+    "and",
+    "basic-regexp",
+    "before-context",
+    "break",
+    "cached",
+    "color",
+    "column",
+    "context",
+    "count",
+    "exclude-standard",
+    "ext-grep",
+    "extended-regexp",
+    "files-with-matches",
+    "files-without-match",
+    "fixed-strings",
+    "full-name",
+    "function-context",
+    "heading",
+    "ignore-case",
+    "invert-match",
+    "line-number",
+    "max-count",
+    "max-depth",
+    "name-only",
+    "no-index",
+    "not",
+    "null",
+    "only-matching",
+    "open-files-in-pager",
+    "or",
+    "perl-regexp",
+    "quiet",
+    "recurse-submodules",
+    "recursive",
+    "show-function",
+    "text",
+    "textconv",
+    "threads",
+    "untracked",
+    "word-regexp",
+}
+GIT_REBASE_LONG_OPTIONS = {
+    "abort",
+    "allow-empty-message",
+    "apply",
+    "autosquash",
+    "autostash",
+    "committer-date-is-author-date",
+    "continue",
+    "edit-todo",
+    "empty",
+    "exec",
+    "force-rebase",
+    "fork-point",
+    "gpg-sign",
+    "ignore-date",
+    "ignore-whitespace",
+    "interactive",
+    "keep-base",
+    "keep-empty",
+    "merge",
+    "no-ff",
+    "no-stat",
+    "no-verify",
+    "onto",
+    "preserve-merges",
+    "quiet",
+    "quit",
+    "reapply-cherry-picks",
+    "rebase-merges",
+    "rerere-autoupdate",
+    "reschedule-failed-exec",
+    "reset-author-date",
+    "root",
+    "show-current-patch",
+    "signoff",
+    "skip",
+    "strategy",
+    "strategy-option",
+    "update-refs",
+    "verbose",
+    "whitespace",
+}
+GIT_SUBCOMMAND_GRAMMARS: Dict[str, Dict] = {
+    "grep": {
+        "target_long": "open-files-in-pager",
+        "target_short": "O",
+        "long_options": GIT_GREP_LONG_OPTIONS,
+        "required_long": {
+            "after-context",
+            "before-context",
+            "context",
+            "max-count",
+            "max-depth",
+            "threads",
+        },
+        "required_short": set("ABCefm"),
+        "optional_short": set(),
+        "no_value_short": set("viwaIrEGFPnhHlLzocpWq"),
+        "numeric_short": True,
+        "stop_at_operand": True,
+    },
+    "rebase": {
+        "target_long": "exec",
+        "target_short": "x",
+        "long_options": GIT_REBASE_LONG_OPTIONS,
+        "required_long": {
+            "empty",
+            "onto",
+            "strategy",
+            "strategy-option",
+            "whitespace",
+        },
+        "required_short": set("CsX"),
+        "optional_short": set("Sr"),
+        "no_value_short": set("qvnfmipk"),
+        "numeric_short": False,
+        "stop_at_operand": False,
+    },
+}
+
 
 class CommandValidator:
     """Validates argv commands against allowlists and default deny rules."""
@@ -259,6 +390,92 @@ class CommandValidator:
                 return index
             index += 2 if arg in options_with_value else 1
         return None
+
+    def _git_long_option_takes_value(self, name: str, grammar: Dict) -> bool:
+        """Return whether a separated Git long option consumes the next token.
+
+        Exact names win, otherwise a unique prefix resolves the option. Unknown
+        or ambiguous names never consume a value: Git rejects them itself, and
+        guessing a value could hide a later execution option.
+        """
+        if name.startswith("no-"):
+            # `--no-<option>` unsets an option and never takes a value.
+            return False
+        names = set(grammar["long_options"])
+        # Options spelled `no-*` are also reachable through their positive base.
+        names |= {option[3:] for option in names if option.startswith("no-")}
+        if name in names:
+            return name in grammar["required_long"]
+        candidates = {option for option in names if option.startswith(name)}
+        return len(candidates) == 1 and candidates <= grammar["required_long"]
+
+    def _validate_git_subcommand_options(self, args: List[str], grammar: Dict) -> None:
+        """Reject execution options of `git grep`/`git rebase` in `args`.
+
+        `args` are the tokens after the subcommand name. Required values are
+        consumed before option detection so they are never rescanned.
+        """
+        index = 0
+        while index < len(args):
+            arg = args[index]
+            index += 1
+            if arg in {"--", "--end-of-options"}:
+                return
+            if arg.startswith("--"):
+                name, separator, _value = arg[2:].partition("=")
+                if name and grammar["target_long"].startswith(name):
+                    raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
+                if not separator and self._git_long_option_takes_value(name, grammar):
+                    index += 1
+                continue
+            if arg == "-" or not arg.startswith("-"):
+                if grammar["stop_at_operand"] and arg not in {"(", ")"}:
+                    return
+                continue
+            position = 1
+            while position < len(arg):
+                letter = arg[position]
+                position += 1
+                if grammar["numeric_short"] and letter.isdigit():
+                    # `-NUM` context shorthand; later letters stay options.
+                    continue
+                if letter == grammar["target_short"]:
+                    raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
+                if letter in grammar["required_short"]:
+                    if position == len(arg):
+                        index += 1
+                    break
+                if letter in grammar["optional_short"]:
+                    break
+                if letter not in grammar["no_value_short"]:
+                    raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
+
+    def _validate_git_execution_subcommand(
+        self, args: List[str], subcommand_index: int | None
+    ) -> None:
+        """Reject Git subcommands and options that run an external program."""
+        if subcommand_index is None:
+            exec_scan_args = args
+        else:
+            subcommand = args[subcommand_index]
+            subcommand_args = args[subcommand_index + 1 :]
+            if subcommand == "filter-branch" or (
+                subcommand == "bisect" and subcommand_args[:1] == ["run"]
+            ):
+                raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
+            if subcommand in GIT_SUBCOMMAND_GRAMMARS:
+                self._validate_git_subcommand_options(
+                    subcommand_args, GIT_SUBCOMMAND_GRAMMARS[subcommand]
+                )
+            if subcommand == "rebase":
+                # rebase's own --exec handling is contextual (see above).
+                return
+            exec_scan_args = subcommand_args
+        # Elsewhere --exec selects a remote helper program (push, archive, ...).
+        for arg in exec_scan_args:
+            name = arg[2:].partition("=")[0] if arg.startswith("--") else ""
+            if name and "exec".startswith(name):
+                raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
 
     def _sort_long_option_candidates(self, name: str) -> set[str]:
         """Resolve a `sort` long option name the way getopt_long resolves it.
@@ -418,7 +635,6 @@ class CommandValidator:
                     args,
                     {
                         "--config-env",
-                        "--exec",
                         "--exec-path",
                         "--receive-pack",
                         "--upload-pack",
@@ -442,9 +658,8 @@ class CommandValidator:
                 )
                 or any(arg.startswith("ext::") for arg in args)
             ):
-                raise ValueError(
-                    "Command rejected by default security policy: git external program"
-                )
+                raise ValueError(GIT_EXTERNAL_PROGRAM_ERROR)
+            self._validate_git_execution_subcommand(args, subcommand_index)
 
     def validate_pipeline(self, commands: List[str]) -> Dict[str, str]:
         """Validate pipeline tokens and ensure all command segments are allowed."""
