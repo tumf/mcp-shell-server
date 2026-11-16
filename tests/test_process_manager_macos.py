@@ -135,10 +135,11 @@ async def test_process_group_termination(process_manager):
         # Kill the main process
         process.kill()
 
-        # Wait a moment for cleanup
-        await asyncio.sleep(0.5)
+        # Reap the child before the test event loop closes.
+        await process.wait()
 
-        # Check if any processes from the group remain
+        # Check if any processes from the group remain; background children may still exist.
+        await asyncio.sleep(0.5)
         ps = subprocess.run(["pgrep", "-g", str(process.pid)], capture_output=True)
         assert ps.returncode != 0, "Process group still exists"
     finally:
@@ -147,3 +148,4 @@ async def test_process_group_termination(process_manager):
                 process.kill()
             except ProcessLookupError:
                 pass
+        await process.wait()
