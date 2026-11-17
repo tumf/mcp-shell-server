@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.15] - 2026-11-17
+
+### Changed
+- Refresh the development lockfile, including MCP SDK 1.30.0 and maintenance-tool dependencies. The published MCP dependency range remains `mcp>=1.28.1,<2`.
+- Document the feature/develop/main branch and release flow.
+- Remove the Smithery badge from the README.
+
+### Tests
+- Cover synchronous and asynchronous process-exit races during timeout cleanup.
+- Reap macOS subprocesses and drain their pipes before closing the event loop.
+
+This maintenance release does not change the server's production execution policy or trusted-execution security contract.
+
 ## [1.1.14] - 2026-10-19
 
 ### Security
